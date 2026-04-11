@@ -85,7 +85,7 @@ export default function AIAssistant(props){
 
     try{
       var apiMsgs=newMsgs.map(function(m){return{role:m.role==="user"?"user":"assistant",content:m.text};});
-      var r=await fetch("https://api.anthropic.com/v1/messages",{
+      var r=await fetch("/api/chat",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
