@@ -10,7 +10,22 @@ export default function AIAssistant(props){
   var i_=_(""),input=i_[0],setInput=i_[1];
   var l_=_(false),loading=l_[0],setLoading=l_[1];
 
-  function buildSystemPrompt(){
+  function getClientExerciseData(name){
+    var found=cl.filter(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0;});
+    if(!found.length)return"";
+    return found.slice(0,3).map(function(c){
+      if(!c.exercises||!c.exercises.length)return c.name+": sin datos de ejercicios";
+      var exData=c.exercises.map(function(e){
+        if(!e.records||!e.records.length)return null;
+        var last=e.records[e.records.length-1];
+        var best=e.records.reduce(function(a,b){return(b.weight>a.weight)?b:a;},e.records[0]);
+        return e.name+": "+e.records.length+" registros. Última marca: "+last.date+" S:"+last.series+" P:"+last.weight+"kg R:"+last.reps+(last.notes?" ("+last.notes+")":"")+". Mejor peso: "+best.weight+"kg ("+best.date+")";
+      }).filter(Boolean);
+      return c.name+" ("+c.status+")"+(c.observations?" — "+c.observations:"")+"\n  "+exData.join("\n  ");
+    }).join("\n\n");
+  }
+
+  function buildSystemPrompt(userInput){
     var td=new Date().toISOString().split("T")[0];
     var activos=cl.filter(function(c){return c.status==="activo";});
     var pausados=cl.filter(function(c){return c.status==="pausado";});
@@ -21,6 +36,17 @@ export default function AIAssistant(props){
     var pendList=pendFu.slice(0,10).map(function(f){return f.clientName+" - "+f.date+" - "+(f.message||"sin msg");}).join("; ");
     var leadsList=le.slice(0,50).map(function(l){return l.name+" ("+l.status+") "+(l.month||"")+" "+(l.year||"");}).join(", ");
 
+    // Search for client exercise data if user mentions a name
+    var exerciseInfo="";
+    if(userInput){
+      var words=userInput.toLowerCase().split(/\s+/);
+      cl.forEach(function(c){
+        var nameParts=c.name.toLowerCase().split(/\s+/);
+        var match=nameParts.some(function(np){return np.length>2&&words.some(function(w){return w.length>2&&w===np;});});
+        if(match)exerciseInfo+="\n"+getClientExerciseData(c.name);
+      });
+    }
+
     return "Eres el asistente IA de T2Tcrm, el CRM de Time2Train, un centro de entrenamiento personal en Alicante. Habla en español, sé directo y útil.\n\n"+
     "DATOS ACTUALES ("+td+"):\n"+
     "- Clientes totales: "+cl.length+" ("+activos.length+" activos, "+pausados.length+" pausados, "+bajas.length+" bajas)\n"+
@@ -28,6 +54,7 @@ export default function AIAssistant(props){
     "- Leads totales: "+le.length+"\n"+
     "- Reportes fisio: "+fis.length+"\n\n"+
     "CLIENTES: "+clientNames+"\n\n"+
+    (exerciseInfo?("DATOS DE EJERCICIOS DEL CLIENTE MENCIONADO:"+exerciseInfo+"\n\n"):"")+
     "SEGUIMIENTOS PENDIENTES: "+(pendList||"Ninguno")+"\n\n"+
     "LEADS RECIENTES: "+leadsList+"\n\n"+
     "ACCIONES DISPONIBLES - Responde con JSON dentro de ```action``` cuando el usuario pida una acción:\n"+
@@ -36,6 +63,7 @@ export default function AIAssistant(props){
     "3. Crear lead: ```action{\"type\":\"lead\",\"name\":\"nombre\",\"phone\":\"tel\",\"source\":\"origen\",\"status\":\"nada|negociacion|prueba|alta|perdido\",\"month\":\"Mes\",\"year\":\"2026\"}```\n"+
     "4. Cambiar estado cliente: ```action{\"type\":\"status\",\"client\":\"nombre\",\"status\":\"activo|pausado|baja\"}```\n\n"+
     "REGLAS:\n"+
+    "- Si preguntan por marcas, ejercicios o progresión de un cliente, usa los DATOS DE EJERCICIOS que tienes\n"+
     "- Si preguntan datos, responde con los datos reales que tienes\n"+
     "- Si piden una acción, SIEMPRE incluye el bloque action para que el sistema la ejecute\n"+
     "- Si piden navegar a una ficha de cliente, usa navigate con search=nombre del cliente\n"+
@@ -91,7 +119,7 @@ export default function AIAssistant(props){
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",
           max_tokens:1000,
-          system:buildSystemPrompt(),
+          system:buildSystemPrompt(input),
           messages:apiMsgs
         })
       });
