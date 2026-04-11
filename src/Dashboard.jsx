@@ -4,7 +4,7 @@ var MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","S
 
 export default function Dashboard(props){
   var T=props.theme;var dk=props.dk;
-  var cl=props.clients||[];var le=props.leads||[];var fu=props.followups||[];var fis=props.fisio||[];
+  var cl=props.clients||[];var le=props.leads||[];var fu=props.followups||[];var fis=props.fisio||[];var timpData=props.timpData||null;
   var _=useState;
   var m_=_(new Date().getMonth()),selM=m_[0],setSelM=m_[1];
   var y_=_(2026),selY=y_[0],setSelY=y_[1];
@@ -211,6 +211,58 @@ export default function Dashboard(props){
         {sinObs.length>15&&<div style={{fontSize:10,color:T.text3,marginTop:6}}>...y {sinObs.length-15} más</div>}
       </div>;
     })()}
+
+    {/* TIMP Data */}
+    {timpData&&<div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:20}}>
+      <div style={Object.assign({},B,{flex:"1 1 300px",padding:20})}>
+        <h3 style={{margin:"0 0 14px",fontSize:15,fontWeight:800,color:T.text}}>🔗 Datos TIMP — Tiempo Real</h3>
+        <div style={{display:"flex",gap:16,marginBottom:14}}>
+          <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#22c55e"}}>{timpData.filter(function(s){return s.active_membership;}).length}</div><div style={{fontSize:10,color:T.text3}}>Activos TIMP</div></div>
+          <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#ef4444"}}>{timpData.filter(function(s){return s.payment_pending;}).length}</div><div style={{fontSize:10,color:T.text3}}>Pagos pendientes</div></div>
+          <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#3b82f6"}}>{timpData.filter(function(s){return s.next_booking_for;}).length}</div><div style={{fontSize:10,color:T.text3}}>Con reserva</div></div>
+        </div>
+        {/* Clients with payment pending */}
+        {(function(){
+          var pending=timpData.filter(function(s){return s.active_membership&&s.payment_pending;});
+          if(!pending.length)return<div style={{padding:8,background:"#22c55e10",borderRadius:8,fontSize:11,color:"#22c55e"}}>✓ Todos los clientes activos al corriente de pago</div>;
+          return<div>
+            <div style={{fontSize:12,fontWeight:700,color:"#ef4444",marginBottom:6}}>⚠️ Activos con pago pendiente ({pending.length})</div>
+            {pending.slice(0,8).map(function(s){return<div key={s.uuid} style={{fontSize:11,color:T.text3,padding:"2px 0"}}> · {s.full_name} — {s.phone||"sin tel"}</div>;})}
+            {pending.length>8&&<div style={{fontSize:10,color:T.text3}}>...y {pending.length-8} más</div>}
+          </div>;
+        })()}
+      </div>
+
+      <div style={Object.assign({},B,{flex:"1 1 300px",padding:20})}>
+        <h3 style={{margin:"0 0 14px",fontSize:15,fontWeight:800,color:T.text}}>📅 Próximas reservas</h3>
+        {(function(){
+          var withBooking=timpData.filter(function(s){return s.next_booking_for;}).sort(function(a,b){return a.next_booking_for.localeCompare(b.next_booking_for);});
+          if(!withBooking.length)return<div style={{fontSize:12,color:T.text3}}>Sin reservas próximas</div>;
+          return withBooking.slice(0,10).map(function(s){
+            var d=new Date(s.next_booking_for);
+            var ds=d.toLocaleDateString("es-ES",{weekday:"short",day:"numeric",month:"short"});
+            var ts=d.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
+            return<div key={s.uuid} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid "+T.border,fontSize:11}}>
+              <span style={{color:T.text,fontWeight:600}}>{s.full_name}</span>
+              <span style={{color:T.text3}}>{ds} {ts}</span>
+            </div>;
+          });
+        })()}
+      </div>
+
+      {/* Alerts: active in CRM but not in TIMP */}
+      <div style={Object.assign({},B,{flex:"1 1 300px",padding:20})}>
+        <h3 style={{margin:"0 0 14px",fontSize:15,fontWeight:800,color:T.text}}>⚡ Alertas CRM vs TIMP</h3>
+        {(function(){
+          var alerts=cl.filter(function(c){return c.timpAlert;});
+          if(!alerts.length)return<div style={{padding:8,background:"#22c55e10",borderRadius:8,fontSize:11,color:"#22c55e"}}>✓ CRM y TIMP sincronizados</div>;
+          return<div>
+            <div style={{fontSize:12,fontWeight:700,color:"#f59e0b",marginBottom:6}}>⚠️ Discrepancias encontradas ({alerts.length})</div>
+            {alerts.slice(0,8).map(function(c){return<div key={c.id} style={{fontSize:11,color:T.text3,padding:"2px 0"}}> · {c.name}: {c.timpAlert}</div>;})}
+          </div>;
+        })()}
+      </div>
+    </div>}
 
   </div>);
 }

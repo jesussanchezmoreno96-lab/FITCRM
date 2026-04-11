@@ -53,6 +53,10 @@ export default function App(){
   var fis_=_([]),fis=fis_[0],setFis=fis_[1];
   var sFis_=_(false),sFis=sFis_[0],setSFis=sFis_[1];
   var fisF_=_({client:"",date:"",trainDate:"",zones:"",notes:"",plan:""}),fisF=fisF_[0],setFisF=fisF_[1];
+  // TIMP
+  var timp_=_(null),timpData=timp_[0],setTimpData=timp_[1];
+  var timpSync_=_(false),timpSyncing=timpSync_[0],setTimpSyncing=timpSync_[1];
+  var timpLast_=_(null),timpLast=timpLast_[0],setTimpLast=timpLast_[1];
   // Theme
   var th_=_("dark"),theme=th_[0],setTheme=th_[1];
   var dk=theme==="dark";
@@ -74,6 +78,53 @@ export default function App(){
   function saveFisio(f){dbSave("fisio_reports",f.id,f).catch(function(){});}
   function deleteFisio(id){dbDel("fisio_reports",id).catch(function(){});}
 
+  var TIMP_CENTER="ebb9a2c0-782e-4d77-b5eb-17d18a1f8949";
+  function timpFetch(endpoint){return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/"+endpoint).then(function(r){return r.json();});}
+
+  function syncTimp(){
+    setTimpSyncing(true);
+    timpFetch("subscriptions?page=1").then(function(data){
+      if(!data||!data.collection){setTimpSyncing(false);return;}
+      var subs=data.collection;
+      setTimpData(subs);
+      setTimpLast(new Date().toLocaleString("es-ES"));
+      // Update CRM clients with TIMP data
+      setCl(function(prev){
+        var updated=prev.map(function(c){
+          // Match by name (fuzzy)
+          var match=subs.find(function(s){
+            return s.full_name&&c.name&&(
+              s.full_name.toLowerCase()===c.name.toLowerCase()||
+              s.full_name.toLowerCase().indexOf(c.name.toLowerCase())>=0||
+              c.name.toLowerCase().indexOf(s.full_name.toLowerCase())>=0
+            );
+          });
+          if(match){
+            var upd=Object.assign({},c);
+            upd.timpUuid=match.uuid;
+            upd.timpActive=match.active_membership;
+            upd.timpPaymentPending=match.payment_pending;
+            upd.timpNextBooking=match.next_booking_for;
+            upd.timpPhone=match.phone;
+            upd.timpEmail=match.email;
+            upd.timpNif=match.nif;
+            upd.timpAddress=match.address;
+            // Auto-update status if TIMP says active but CRM says baja
+            if(match.active_membership&&c.status==="baja"){upd.status="activo";}
+            // If TIMP says inactive but CRM says activo, flag it
+            if(!match.active_membership&&c.status==="activo"){upd.timpAlert="Posible baja en TIMP";}
+            else{upd.timpAlert=null;}
+            return upd;
+          }
+          return c;
+        });
+        // Save updated clients
+        updated.forEach(function(c){if(c.timpUuid)saveClient(c);});
+        return updated;
+      });
+      setTimpSyncing(false);
+    }).catch(function(){setTimpSyncing(false);});
+  }
   var td=new Date().toISOString().split("T")[0];
   var pc=fu.filter(function(f){return!f.done&&f.date<=td;}).length;
   var fisioAlerts=fis.filter(function(f){return!f.done&&f.trainDate&&f.trainDate<=td;});
@@ -122,6 +173,14 @@ export default function App(){
           <div style={{fontSize:12,color:T.text3}}>Reportes y métricas mensuales</div>
         </button>
       </div>
+      {/* TIMP Sync */}
+      <div style={{marginTop:30,textAlign:"center"}}>
+        <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"10px 24px",background:timpSyncing?"#475569":"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:timpSyncing?"not-allowed":"pointer"}}>
+          {timpSyncing?"🔄 Sincronizando...":"🔗 Sincronizar con TIMP"}
+        </button>
+        {timpLast&&<div style={{fontSize:10,color:T.text3,marginTop:6}}>Última sync: {timpLast}</div>}
+        {timpData&&<div style={{fontSize:10,color:"#22c55e",marginTop:4}}>✓ {timpData.filter(function(s){return s.active_membership;}).length} activos en TIMP · {timpData.filter(function(s){return s.payment_pending;}).length} pagos pendientes</div>}
+      </div>
     </div>
   );
 
@@ -138,7 +197,7 @@ export default function App(){
         </div>
       </div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:20}}>
-        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis}/>
+        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis} timpData={timpData}/>
       </div>
       <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} actions={{
         navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
