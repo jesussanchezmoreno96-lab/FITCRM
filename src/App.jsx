@@ -152,6 +152,35 @@ export default function App(){
         });
         // Save updated clients
         updated.forEach(function(c){if(c.timpUuid)saveClient(c);});
+        // Auto-create new clients from TIMP that are active but not in CRM
+        var crmNames=updated.map(function(c){return(c.name||"").toLowerCase().trim();});
+        var newFromTimp=subs.filter(function(s){
+          if(!s.active_membership||!s.full_name)return false;
+          var sn=s.full_name.toLowerCase().trim();
+          return!crmNames.some(function(cn){return cn===sn||cn.indexOf(sn)>=0||sn.indexOf(cn)>=0;});
+        });
+        newFromTimp.forEach(function(s){
+          var nc={
+            id:gid(),
+            name:s.full_name,
+            status:"activo",
+            timpUuid:s.uuid,
+            timpActive:true,
+            timpPaymentPending:s.payment_pending,
+            timpNextBooking:s.next_booking_for,
+            timpPhone:s.phone,
+            timpEmail:s.email,
+            timpNif:s.nif,
+            timpAddress:s.address,
+            timpAlert:"Alta automática desde TIMP",
+            timpAltaDate:now.toISOString(),
+            procedencia:"TIMP",
+            observations:"",
+            exercises:["Press Banca","Globe Squat","Peso Muerto","Hip-Thrust","Press Hombro","Remo","Jalón"].map(function(n){return{name:n,records:[]};})
+          };
+          updated.push(nc);
+          saveClient(nc);
+        });
         return updated;
       });
       setTimpSyncing(false);
