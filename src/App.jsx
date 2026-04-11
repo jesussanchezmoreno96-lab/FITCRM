@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Horarios from "./Horarios.jsx";
 import AIAssistant from "./AIAssistant.jsx";
+import Dashboard from "./Dashboard.jsx";
 
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -114,7 +115,38 @@ export default function App(){
           <div style={{fontSize:12,color:T.text3}}>Reportes y valoraciones</div>
           {fisioAlerts.length>0&&<div style={{marginTop:10}}><span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"#a78bfa15",color:"#a78bfa",fontWeight:600}}>{fisioAlerts.length} avisos hoy</span></div>}
         </button>
+        {/* Dashboard */}
+        <button onClick={function(){setSec("dashboard");}} style={{width:260,padding:"40px 30px",background:dk?"linear-gradient(135deg,#1a1a10,#141820)":T.bg2,border:"2px solid #f59e0b20",borderRadius:20,cursor:"pointer",textAlign:"center",boxShadow:dk?"none":"0 4px 16px rgba(0,0,0,.08)"}}>
+          <div style={{fontSize:48,marginBottom:12}}>📊</div>
+          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:6}}>Dashboard</div>
+          <div style={{fontSize:12,color:T.text3}}>Reportes y métricas mensuales</div>
+        </button>
       </div>
+    </div>
+  );
+
+  /* ═══ DASHBOARD ═══ */
+  if(sec==="dashboard") return(
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{background:dk?"linear-gradient(135deg,#1a1a10,#0a0d14)":"#394265",borderBottom:"1px solid "+T.border,padding:"16px 20px"}}>
+        <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <button onClick={function(){setSec("home");}} style={{padding:"6px 14px",background:dk?"#1e2330":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#2a2f3a":"rgba(255,255,255,.2)"),borderRadius:8,color:dk?"#94a3b8":"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Inicio</button>
+            <span style={{fontSize:20}}>📊</span><h1 style={{margin:0,fontSize:20,fontWeight:800,color:dk?T.text:"#fff"}}>Dashboard — Reportes</h1>
+          </div>
+          <button onClick={function(){setTheme(dk?"light":"dark");}} style={{width:36,height:36,borderRadius:9,background:dk?"#1e2330":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#2a2f3a":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>{dk?"☀️":"🌙"}</button>
+        </div>
+      </div>
+      <div style={{maxWidth:1100,margin:"0 auto",padding:20}}>
+        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis}/>
+      </div>
+      <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} actions={{
+        navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
+        selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
+        createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
+        createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
+        changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});}
+      }}/>
     </div>
   );
 
