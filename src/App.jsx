@@ -69,6 +69,11 @@ export default function App(){
     dbGet("fisio_reports").then(function(r){if(r&&r.length>0)setFis(r.map(function(x){return x.data;}));}).catch(function(){});
   },[]);
 
+  // Auto-sync TIMP when clients are loaded
+  useEffect(function(){
+    if(ld&&cl.length>0&&!timpData){syncTimp();}
+  },[ld]);
+
   function saveClient(c){dbSave("clients",c.id,c).catch(function(){});}
   function deleteClient(id){dbDel("clients",id).catch(function(){});}
   function saveFu(f){dbSave("followups",f.id,f).catch(function(){});}
@@ -138,8 +143,7 @@ export default function App(){
 
   if(!ld)return <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{padding:"8px 20px",background:"#394265",borderRadius:10,color:"#fff",fontSize:18,fontWeight:900,letterSpacing:1}}>time2train</div><div style={{color:"#394265",fontSize:14,fontWeight:600}}>Cargando T2Tcrm...</div></div>;
 
-  /* ═══ HOME SCREEN ═══ */
-  if(sec==="home") return(
+  /* ═══ HOME SCREEN ═══ */  if(sec==="home") return(
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{position:"absolute",top:16,right:20}}><button onClick={function(){setTheme(dk?"light":"dark");}} style={{padding:"8px 14px",background:T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{dk?"☀️ Claro":"🌙 Oscuro"}</button></div>
       <div style={{padding:"12px 28px",background:"#394265",borderRadius:14,marginBottom:12}}><span style={{color:"#fff",fontSize:28,fontWeight:900,letterSpacing:1}}>time<span style={{color:"#8ba3d9"}}>2</span>train</span></div>
@@ -175,11 +179,13 @@ export default function App(){
       </div>
       {/* TIMP Sync */}
       <div style={{marginTop:30,textAlign:"center"}}>
-        <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"10px 24px",background:timpSyncing?"#475569":"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:timpSyncing?"not-allowed":"pointer"}}>
-          {timpSyncing?"🔄 Sincronizando...":"🔗 Sincronizar con TIMP"}
-        </button>
-        {timpLast&&<div style={{fontSize:10,color:T.text3,marginTop:6}}>Última sync: {timpLast}</div>}
-        {timpData&&<div style={{fontSize:10,color:"#22c55e",marginTop:4}}>✓ {timpData.filter(function(s){return s.active_membership;}).length} activos en TIMP · {timpData.filter(function(s){return s.payment_pending;}).length} pagos pendientes</div>}
+        {timpSyncing&&<div style={{fontSize:12,color:T.text3}}>🔄 Sincronizando con TIMP...</div>}
+        {timpData&&<div>
+          <div style={{fontSize:10,color:"#22c55e",marginBottom:4}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership;}).length} activos · {timpData.filter(function(s){return s.payment_pending&&s.active_membership;}).length} pagos pendientes</div>
+          <div style={{fontSize:10,color:T.text3,marginBottom:8}}>Última sync: {timpLast}</div>
+          <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"6px 16px",background:"transparent",border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>↻ Actualizar</button>
+        </div>}
+        {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"10px 24px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar con TIMP</button>}
       </div>
     </div>
   );
