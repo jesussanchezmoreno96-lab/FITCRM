@@ -93,6 +93,8 @@ export default function App(){
       var subs=data.collection;
       setTimpData(subs);
       setTimpLast(new Date().toLocaleString("es-ES"));
+      var now=new Date();
+      var twoWeeksMs=14*24*60*60*1000;
       // Update CRM clients with TIMP data
       setCl(function(prev){
         var updated=prev.map(function(c){
@@ -114,11 +116,36 @@ export default function App(){
             upd.timpEmail=match.email;
             upd.timpNif=match.nif;
             upd.timpAddress=match.address;
-            // Auto-update status if TIMP says active but CRM says baja
-            if(match.active_membership&&c.status==="baja"){upd.status="activo";}
-            // If TIMP says inactive but CRM says activo, flag it
-            if(!match.active_membership&&c.status==="activo"){upd.timpAlert="Posible baja en TIMP";}
-            else{upd.timpAlert=null;}
+            // ALTA: TIMP activo → CRM activo (inmediato)
+            if(match.active_membership&&c.status!=="activo"){
+              upd.status="activo";
+              upd.timpAlert="Alta automática desde TIMP";
+              upd.timpAltaDate=now.toISOString();
+            }
+            // BAJA: TIMP inactivo + más de 2 semanas → CRM baja
+            else if(!match.active_membership&&c.status==="activo"){
+              // Check if we already flagged it
+              if(c.timpInactiveDate){
+                var flagDate=new Date(c.timpInactiveDate);
+                if(now-flagDate>=twoWeeksMs){
+                  upd.status="baja";
+                  upd.timpAlert="Baja automática (2+ semanas sin bono en TIMP)";
+                  upd.motivoBaja="Sin bono activo en TIMP";
+                }else{
+                  var diasRestantes=Math.ceil((twoWeeksMs-(now-flagDate))/(24*60*60*1000));
+                  upd.timpAlert="Sin bono en TIMP — baja automática en "+diasRestantes+" días";
+                }
+              }else{
+                // First time detecting inactive, flag the date
+                upd.timpInactiveDate=now.toISOString();
+                upd.timpAlert="Sin bono en TIMP — baja automática en 14 días";
+              }
+            }
+            // Activo en ambos, todo OK
+            else if(match.active_membership&&c.status==="activo"){
+              upd.timpAlert=null;
+              upd.timpInactiveDate=null;
+            }
             return upd;
           }
           return c;
