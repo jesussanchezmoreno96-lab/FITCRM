@@ -57,6 +57,8 @@ export default function App(){
   var timp_=_(null),timpData=timp_[0],setTimpData=timp_[1];
   var timpSync_=_(false),timpSyncing=timpSync_[0],setTimpSyncing=timpSync_[1];
   var timpLast_=_(null),timpLast=timpLast_[0],setTimpLast=timpLast_[1];
+  // Bonos TIMP
+  var bonos_=_([]),bonos=bonos_[0],setBonos=bonos_[1];
   // Theme
   var th_=_("dark"),theme=th_[0],setTheme=th_[1];
   var dk=theme==="dark";
@@ -175,6 +177,73 @@ export default function App(){
       setTimpSyncing(false);
     }).catch(function(){setTimpSyncing(false);});
   }
+
+  // Import cuotas from TIMP Excel
+  function importCuotas(e){
+    var file=e.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        var XLSX=window.XLSX||null;
+        if(!XLSX){alert("Cargando librería...");return;}
+        var wb=XLSX.read(ev.target.result,{type:"array",cellDates:true});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        // Find header row
+        var hIdx=rows.findIndex(function(r){return r[0]==="Número de factura"||r[0]==="ID"||r[3]==="Cliente (nombre)";});
+        if(hIdx<0)hIdx=rows.findIndex(function(r){return r&&r.some&&r.some(function(c){return c==="Cliente (nombre)";});});
+        if(hIdx<0){alert("No se encontró la cabecera del archivo");return;}
+        var headers=rows[hIdx];
+        var parsed=[];
+        for(var i=hIdx+1;i<rows.length;i++){
+          var r=rows[i];
+          if(!r||!r[3])continue;
+          var nombre=(r[3]||"")+" "+(r[4]||"");
+          nombre=nombre.trim();
+          if(!nombre)continue;
+          parsed.push({
+            nombre:nombre,
+            nif:r[6]||"",
+            telefono:r[5]||"",
+            concepto:r[10]||"",
+            elemento:r[11]||"",
+            totalSesiones:r[12]||0,
+            usadas:r[13]||0,
+            sinCanjear:r[14]||0,
+            enUso:r[15]||0,
+            caducadas:r[16]||0,
+            tipoBono:r[17]||"",
+            formaPago:r[18]||"",
+            fechaVenta:r[20]||"",
+            fechaValor:r[21]||"",
+            total:r[29]||0,
+            pagado:r[30]||0,
+            pendientePago:r[31]||0,
+            profesional:r[24]||""
+          });
+        }
+        setBonos(parsed);
+        alert("✅ "+parsed.length+" registros de cuotas importados");
+      }catch(err){alert("Error: "+err.message);}
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value="";
+  }
+
+  // Get bonos for a specific client
+  function getClientBonos(name){
+    if(!bonos.length||!name)return[];
+    var n=name.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    return bonos.filter(function(b){
+      var bn=b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+      if(bn===n)return true;
+      var wa=n.split(" "),wb=bn.split(" ");
+      if(wa.length>=2&&wb.length>=2&&wa[0]===wb[0]&&wa[1]===wb[1])return true;
+      return false;
+    });
+  }
+
   var td=new Date().toISOString().split("T")[0];
   var pc=fu.filter(function(f){return!f.done&&f.date<=td;}).length;
   var fisioAlerts=fis.filter(function(f){return!f.done&&f.trainDate&&f.trainDate<=td;});
@@ -231,6 +300,14 @@ export default function App(){
           <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"6px 16px",background:"transparent",border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>↻ Actualizar</button>
         </div>}
         {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"10px 24px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar con TIMP</button>}
+      </div>
+      {/* Import cuotas */}
+      <div style={{marginTop:16,textAlign:"center"}}>
+        <label style={{padding:"8px 18px",background:dk?"#1e2330":T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-block"}}>
+          📤 Importar Cuotas TIMP
+          <input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{display:"none"}}/>
+        </label>
+        {bonos.length>0&&<div style={{fontSize:10,color:"#22c55e",marginTop:6}}>✓ {bonos.length} cuotas cargadas</div>}
       </div>
     </div>
   );
@@ -387,8 +464,78 @@ export default function App(){
         </div>
         <button onClick={function(){setEf({ei:et,date:td,series:"",weight:"",reps:"",notes:""});setSE(true);}} style={{marginTop:12,padding:"6px 14px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>🏋️ Marca</button>
       </div>
-      <div style={{display:"flex",borderBottom:"1px solid #1e2330"}}>{[["perfil","👤 Perfil"],["ex","🏋️ Marcas Ejercicios"]].map(function(t){return<button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:"14px",background:"transparent",border:"none",borderBottom:tab===t[0]?"3px solid #6366f1":"3px solid transparent",color:tab===t[0]?"#e2e8f0":"#64748b",fontSize:14,fontWeight:700,cursor:"pointer"}}>{t[1]}</button>;})}</div>
+      <div style={{display:"flex",borderBottom:"1px solid #1e2330"}}>{[["perfil","👤 Perfil"],["bonos","💳 Bonos"],["ex","🏋️ Marcas"]].map(function(t){return<button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:"14px",background:"transparent",border:"none",borderBottom:tab===t[0]?"3px solid #6366f1":"3px solid transparent",color:tab===t[0]?"#e2e8f0":"#64748b",fontSize:13,fontWeight:700,cursor:"pointer"}}>{t[1]}</button>;})}</div>
       <div style={{padding:20}}>
+        {tab==="bonos"&&<div>
+          {(function(){
+            var cb=getClientBonos(sel.name);
+            if(!cb.length)return<div style={{textAlign:"center",padding:30,color:T.text3}}>
+              <div style={{fontSize:40,opacity:0.2,marginBottom:10}}>💳</div>
+              <div style={{fontSize:13}}>Sin datos de bonos</div>
+              <div style={{fontSize:11,marginTop:6}}>Importa las cuotas vigentes desde la pantalla de inicio</div>
+            </div>;
+            // Sort: most recent first
+            cb.sort(function(a,b){
+              var da=a.fechaValor?new Date(a.fechaValor):new Date(0);
+              var db=b.fechaValor?new Date(b.fechaValor):new Date(0);
+              return db-da;
+            });
+            // Summary
+            var totalSes=cb.reduce(function(s,b){return s+(b.totalSesiones||0);},0);
+            var usadas=cb.reduce(function(s,b){return s+(b.usadas||0);},0);
+            var sinCanjear=cb.reduce(function(s,b){return s+(b.sinCanjear||0);},0);
+            var enUso=cb.reduce(function(s,b){return s+(b.enUso||0);},0);
+            var caducadas=cb.reduce(function(s,b){return s+(b.caducadas||0);},0);
+            var pendientes=totalSes-usadas-caducadas;
+            return<div>
+              {/* Summary cards */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:18}}>
+                {[["Total",totalSes,"#e2e8f0"],["Usadas",usadas,"#22c55e"],["Sin canjear",sinCanjear,"#f59e0b"],["En uso",enUso,"#3b82f6"],["Caducadas",caducadas,"#ef4444"]].map(function(x){
+                  return<div key={x[0]} style={{flex:"1 1 80px",background:T.bg3,borderRadius:10,padding:"12px 10px",textAlign:"center",border:"1px solid "+T.border}}>
+                    <div style={{fontSize:22,fontWeight:900,color:x[2]}}>{x[1]}</div>
+                    <div style={{fontSize:9,color:T.text3,fontWeight:600,textTransform:"uppercase",marginTop:2}}>{x[0]}</div>
+                  </div>;
+                })}
+              </div>
+              {/* Bono list */}
+              {cb.map(function(b,i){
+                var pct=b.totalSesiones>0?Math.round((b.usadas/b.totalSesiones)*100):0;
+                var isActive=b.sinCanjear>0||b.enUso>0;
+                var fv=b.fechaValor;
+                var fechaStr="";
+                if(fv){
+                  try{var d=new Date(fv);fechaStr=d.toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"});}catch(e){fechaStr=String(fv);}
+                }
+                return<div key={i} style={{background:T.bg3,borderRadius:12,padding:16,marginBottom:10,border:"1px solid "+(isActive?"#6366f130":T.border)}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text}}>{b.tipoBono||b.concepto}</div>
+                      <div style={{fontSize:11,color:T.text3,marginTop:2}}>{fechaStr}{b.formaPago?" · "+b.formaPago:""}</div>
+                    </div>
+                    <span style={{fontSize:10,padding:"3px 10px",borderRadius:6,background:isActive?"#6366f115":"#47556915",color:isActive?"#818cf8":"#64748b",fontWeight:700}}>{isActive?"En curso":"Finalizado"}</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{background:T.border,borderRadius:6,height:8,marginBottom:10,overflow:"hidden"}}>
+                    <div style={{display:"flex",height:"100%"}}>
+                      <div style={{width:pct+"%",background:"#22c55e",transition:"width .3s"}}></div>
+                      {b.caducadas>0&&<div style={{width:Math.round((b.caducadas/b.totalSesiones)*100)+"%",background:"#ef4444"}}></div>}
+                    </div>
+                  </div>
+                  {/* Session details */}
+                  <div style={{display:"flex",gap:12,fontSize:11,color:T.text2,flexWrap:"wrap"}}>
+                    <span>📊 Total: <b style={{color:T.text}}>{b.totalSesiones}</b></span>
+                    <span>✅ Usadas: <b style={{color:"#22c55e"}}>{b.usadas}</b></span>
+                    {b.sinCanjear>0&&<span>🔄 Sin canjear: <b style={{color:"#f59e0b"}}>{b.sinCanjear}</b></span>}
+                    {b.enUso>0&&<span>▶️ En uso: <b style={{color:"#3b82f6"}}>{b.enUso}</b></span>}
+                    {b.caducadas>0&&<span>❌ Caducadas: <b style={{color:"#ef4444"}}>{b.caducadas}</b></span>}
+                  </div>
+                  {/* Payment info */}
+                  {b.pendientePago>0&&<div style={{marginTop:8,fontSize:10,padding:"4px 10px",background:"#ef444410",borderRadius:6,color:"#ef4444",fontWeight:600}}>⚠️ Pendiente de pago: {b.pendientePago}€</div>}
+                </div>;
+              })}
+            </div>;
+          })()}
+        </div>}
         {tab==="perfil"&&<div>
           <div style={{marginBottom:14}}><label style={{fontSize:11,color:"#8892a4",fontWeight:600,display:"block",marginBottom:5}}>EDAD</label><input type="number" value={sel.age||""} onChange={function(e){var v=e.target.value;setSel(function(p){return Object.assign({},p,{age:v});});sv(function(p){return p.map(function(c){return c.id===sel.id?Object.assign({},c,{age:v}):c;});});}} style={{width:100,padding:"9px 12px",background:T.bg3,border:"1px solid "+T.border2,borderRadius:9,color:T.text,fontSize:14,outline:"none"}}/></div>
           <div style={{marginBottom:14}}><label style={{fontSize:11,color:"#8892a4",fontWeight:600,display:"block",marginBottom:5}}>OBJETIVO</label><select value={sel.objective||""} onChange={function(e){var v=e.target.value;setSel(function(p){return Object.assign({},p,{objective:v});});sv(function(p){return p.map(function(c){return c.id===sel.id?Object.assign({},c,{objective:v}):c;});});}} style={iS}><option value="">—</option>{OBJ.map(function(o){return<option key={o} value={o}>{o}</option>;})}</select></div>
