@@ -217,7 +217,7 @@ export default function Dashboard(props){
       <div style={Object.assign({},B,{flex:"1 1 300px",padding:20})}>
         <h3 style={{margin:"0 0 14px",fontSize:15,fontWeight:800,color:T.text}}>🔗 Datos TIMP — Tiempo Real</h3>
         <div style={{display:"flex",gap:16,marginBottom:14}}>
-          <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#22c55e"}}>{timpData.filter(function(s){return s.active_membership;}).length}</div><div style={{fontSize:10,color:T.text3}}>Activos TIMP</div></div>
+          <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#22c55e"}}>{timpData.filter(function(s){return s.active_membership||s.next_booking_for;}).length}</div><div style={{fontSize:10,color:T.text3}}>Con bono TIMP</div></div>
           <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#ef4444"}}>{timpData.filter(function(s){return s.payment_pending;}).length}</div><div style={{fontSize:10,color:T.text3}}>Pagos pendientes</div></div>
           <div style={{textAlign:"center",flex:1}}><div style={{fontSize:28,fontWeight:900,color:"#3b82f6"}}>{timpData.filter(function(s){return s.next_booking_for;}).length}</div><div style={{fontSize:10,color:T.text3}}>Con reserva</div></div>
         </div>

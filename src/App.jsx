@@ -94,7 +94,6 @@ export default function App(){
       setTimpData(subs);
       setTimpLast(new Date().toLocaleString("es-ES"));
       var now=new Date();
-      var twoWeeksMs=14*24*60*60*1000;
       // Update CRM clients with TIMP data
       setCl(function(prev){
         var updated=prev.map(function(c){
@@ -116,35 +115,23 @@ export default function App(){
             upd.timpEmail=match.email;
             upd.timpNif=match.nif;
             upd.timpAddress=match.address;
-            // ALTA: TIMP activo → CRM activo (inmediato)
-            if(match.active_membership&&c.status!=="activo"){
+            // Cliente con bono = active_membership OR tiene reserva futura
+            var tieneBono=match.active_membership||!!match.next_booking_for;
+            // ALTA: tiene bono → CRM activo (inmediato)
+            if(tieneBono&&c.status!=="activo"){
               upd.status="activo";
               upd.timpAlert="Alta automática desde TIMP";
               upd.timpAltaDate=now.toISOString();
             }
-            // BAJA: TIMP inactivo + más de 2 semanas → CRM baja
-            else if(!match.active_membership&&c.status==="activo"){
-              // Check if we already flagged it
-              if(c.timpInactiveDate){
-                var flagDate=new Date(c.timpInactiveDate);
-                if(now-flagDate>=twoWeeksMs){
-                  upd.status="baja";
-                  upd.timpAlert="Baja automática (2+ semanas sin bono en TIMP)";
-                  upd.motivoBaja="Sin bono activo en TIMP";
-                }else{
-                  var diasRestantes=Math.ceil((twoWeeksMs-(now-flagDate))/(24*60*60*1000));
-                  upd.timpAlert="Sin bono en TIMP — baja automática en "+diasRestantes+" días";
-                }
-              }else{
-                // First time detecting inactive, flag the date
-                upd.timpInactiveDate=now.toISOString();
-                upd.timpAlert="Sin bono en TIMP — baja automática en 14 días";
-              }
+            // BAJA: sin bono ni reserva → baja inmediata
+            else if(!tieneBono&&c.status==="activo"){
+              upd.status="baja";
+              upd.timpAlert="Baja automática (sin bono activo en TIMP)";
+              upd.motivoBaja="Sin bono activo en TIMP";
             }
             // Activo en ambos, todo OK
-            else if(match.active_membership&&c.status==="activo"){
+            else if(tieneBono&&c.status==="activo"){
               upd.timpAlert=null;
-              upd.timpInactiveDate=null;
             }
             return upd;
           }
@@ -155,7 +142,9 @@ export default function App(){
         // Auto-create new clients from TIMP that are active but not in CRM
         var crmNames=updated.map(function(c){return(c.name||"").toLowerCase().trim();});
         var newFromTimp=subs.filter(function(s){
-          if(!s.active_membership||!s.full_name)return false;
+          if(!s.full_name)return false;
+          var tieneBono=s.active_membership||!!s.next_booking_for;
+          if(!tieneBono)return false;
           var sn=s.full_name.toLowerCase().trim();
           return!crmNames.some(function(cn){return cn===sn||cn.indexOf(sn)>=0||sn.indexOf(cn)>=0;});
         });
@@ -237,7 +226,7 @@ export default function App(){
       <div style={{marginTop:30,textAlign:"center"}}>
         {timpSyncing&&<div style={{fontSize:12,color:T.text3}}>🔄 Sincronizando con TIMP...</div>}
         {timpData&&<div>
-          <div style={{fontSize:10,color:"#22c55e",marginBottom:4}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership;}).length} activos · {timpData.filter(function(s){return s.payment_pending&&s.active_membership;}).length} pagos pendientes</div>
+          <div style={{fontSize:10,color:"#22c55e",marginBottom:4}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership||s.next_booking_for;}).length} con bono · {timpData.filter(function(s){return s.payment_pending&&(s.active_membership||s.next_booking_for);}).length} pagos pendientes</div>
           <div style={{fontSize:10,color:T.text3,marginBottom:8}}>Última sync: {timpLast}</div>
           <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"6px 16px",background:"transparent",border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>↻ Actualizar</button>
         </div>}
