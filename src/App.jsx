@@ -429,7 +429,7 @@ export default function App(){
       <button onClick={function(){setFm({});setSA(true);}} style={{padding:"8px 16px",background:dk?"linear-gradient(135deg,#394265,#4a5580)":"rgba(255,255,255,.2)",border:"none",borderRadius:9,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Cliente</button>
     </div>
   </div>
-  <div style={{display:"flex",gap:4,padding:"6px 0"}}>{[["clientes","📊","Fichas"],["panel","👥","Clientes"],["seguimiento","📋","Seguimiento"],["leads","🎯","Leads"],["horarios","📅","Horarios"]].map(function(x){var active=mv===x[0];return<button key={x[0]} onClick={function(){setMv(x[0]);}} style={{padding:"12px 20px",border:"none",borderBottom:active?"3px solid "+(dk?"#8ba3d9":"#fff"):"3px solid transparent",background:active?(dk?"rgba(99,102,241,.1)":"rgba(255,255,255,.15)"):"transparent",color:active?(dk?"#e2e8f0":"#fff"):(dk?"#64748b":"rgba(255,255,255,.5)"),fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderRadius:"8px 8px 0 0"}}><span style={{fontSize:18}}>{x[1]}</span>{x[2]}{x[0]==="seguimiento"&&pc>0?<span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:"#ef4444",color:"#fff",fontWeight:800}}>{pc}</span>:null}</button>;})}</div>
+  <div style={{display:"flex",gap:4,padding:"6px 0",overflowX:"auto"}}>{[["clientes","📊","Fichas"],["panel","👥","Clientes"],["seguimiento","📋","Seguimiento"],["leads","🎯","Leads"],["renovaciones","🔄","Renovaciones"],["horarios","📅","Horarios"]].map(function(x){var active=mv===x[0];return<button key={x[0]} onClick={function(){setMv(x[0]);}} style={{padding:"12px 16px",border:"none",borderBottom:active?"3px solid "+(dk?"#8ba3d9":"#fff"):"3px solid transparent",background:active?(dk?"rgba(99,102,241,.1)":"rgba(255,255,255,.15)"):"transparent",color:active?(dk?"#e2e8f0":"#fff"):(dk?"#64748b":"rgba(255,255,255,.5)"),fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,borderRadius:"8px 8px 0 0",whiteSpace:"nowrap"}}><span style={{fontSize:16}}>{x[1]}</span>{x[2]}{x[0]==="seguimiento"&&pc>0?<span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:"#ef4444",color:"#fff",fontWeight:800}}>{pc}</span>:null}</button>;})}</div>
   </div></div>
 
   <div style={{maxWidth:1100,margin:"0 auto",padding:"20px"}}>
@@ -568,6 +568,145 @@ export default function App(){
     {lyear!=="todos"&&<div style={{marginBottom:10}}><div style={{fontSize:10,color:"#8892a4",fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Mes</div><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{(function(){var order=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];var months=["todos"].concat(order);return months.map(function(m){var n=m==="todos"?le.filter(function(l){return l.year===lyear;}).length:le.filter(function(l){return l.year===lyear&&l.month===m;}).length;return<button key={m} onClick={function(){setLmonth(m);}} style={{padding:"5px 12px",borderRadius:8,border:lmonth===m?"1px solid #a78bfa":"1px solid "+T.border,background:lmonth===m?"rgba(167,139,250,.1)":"transparent",color:lmonth===m?"#a78bfa":n>0?T.text3:"#333842",fontSize:10,fontWeight:600,cursor:"pointer"}}>{m==="todos"?"Todos":m} ({n})</button>;});})()}</div></div>}
     <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>{LS.map(function(st){var c=le.filter(function(l){return l.status===st.v;}).length;return<button key={st.v} onClick={function(){setLfl(st.v);}} style={{padding:"5px 10px",borderRadius:8,border:lfl===st.v?"1px solid "+st.c:"1px solid #1e2330",background:lfl===st.v?st.c+"12":"transparent",color:lfl===st.v?st.c:"#94a3b8",fontSize:10,fontWeight:600,cursor:"pointer"}}>{st.i}{c}</button>;})} <button onClick={function(){setLfl("activos");}} style={{padding:"5px 10px",borderRadius:8,border:lfl==="activos"?"1px solid #6366f1":"1px solid #1e2330",color:lfl==="activos"?"#e2e8f0":"#64748b",background:lfl==="activos"?"rgba(99,102,241,.1)":"transparent",fontSize:10,fontWeight:600,cursor:"pointer"}}>Activos</button></div>
     <div style={B}>{(function(){var ls=le.slice();if(lyear!=="todos")ls=ls.filter(function(l){return l.year===lyear;});if(lmonth!=="todos")ls=ls.filter(function(l){return l.month===lmonth;});if(lfl==="activos")ls=ls.filter(function(l){return l.status!=="alta"&&l.status!=="perdido";});else ls=ls.filter(function(l){return l.status===lfl;});if(!ls.length)return<div style={{padding:40,textAlign:"center",color:"#475569"}}>{le.length===0?"Añade tu primer lead":"Sin leads con estos filtros"}</div>;return ls.map(function(l){var st=LS.find(function(x){return x.v===l.status;})||LS[0];var isAlta=l.status==="alta";return<div key={l.id} style={{padding:"12px 18px",borderBottom:isAlta?"1px solid rgba(34,197,94,.15)":"1px solid #1e2330",display:"flex",alignItems:"center",gap:10,background:isAlta?"rgba(34,197,94,.08)":"transparent"}}><span style={{fontSize:18}}>{st.i}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:isAlta?"#22c55e":"#e2e8f0"}}>{l.name}{l.source?<span style={{fontSize:9,padding:"2px 5px",borderRadius:5,background:isAlta?"rgba(34,197,94,.15)":"#1e2330",color:isAlta?"#22c55e":"#94a3b8",marginLeft:6}}>{l.source}</span>:null}{l.month?<span style={{fontSize:9,padding:"2px 5px",borderRadius:5,background:T.bg3,color:"#64748b",marginLeft:4}}>{l.month} {l.year}</span>:null}</div><div style={{display:"flex",gap:10,fontSize:10,color:"#64748b"}}>{l.phone&&<span>📱 {l.phone}</span>}{l.contactDate&&<span>📅 {l.contactDate}</span>}{l.responsable&&<span>👤 {l.responsable}</span>}</div>{l.notes&&<div style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:400}}>{l.notes}</div>}</div><select value={l.status} onChange={function(e){var v=e.target.value;var u=Object.assign({},l,{status:v});setLe(function(p){return p.map(function(x){return x.id===l.id?u:x;});});saveLead(u);}} style={{padding:"4px 6px",background:st.c+"10",border:"1px solid "+st.c+"25",borderRadius:7,color:st.c,fontSize:9,fontWeight:600,outline:"none"}}>{LS.map(function(x){return<option key={x.v} value={x.v}>{x.i} {x.l}</option>;})}</select><button onClick={function(){setLe(function(p){return p.filter(function(x){return x.id!==l.id;});});deleteLead(l.id);}} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:12}}>🗑️</button></div>;});})()}</div>
+  </div>}
+
+  {mv==="renovaciones"&&<div>
+    <h2 style={{margin:"0 0 20px",fontSize:24,fontWeight:800}}>🔄 Renovaciones</h2>
+    {!bonos.length?<div style={Object.assign({},B,{padding:40,textAlign:"center"})}>
+      <div style={{fontSize:40,opacity:0.2,marginBottom:10}}>📤</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text2}}>Importa las cuotas vigentes desde la pantalla de inicio</div>
+      <div style={{fontSize:12,color:T.text3,marginTop:6}}>Botón "📤 Importar Cuotas TIMP"</div>
+    </div>
+    :(function(){
+      // Calculate renewal dates for each client
+      var duraciones={
+        "Time partner":28,"Time partner plus":28,"Time pro+":28,"Entrenamiento sesión":0,
+        "Time partner trimestral":84,"Time partner plus trimestral":84,
+        "Time partner pro":28,"Time partner pro trimestral":84,
+        "Time pro trimestral+":84,
+        "Bono 10 Sesiones Duales":0,"Bono 20 sesiones duales":0,"Bono 5 sesiones duales":0
+      };
+      // Group bonos by client, find the most recent bono per client
+      var clientMap={};
+      bonos.forEach(function(b){
+        var n=b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+        if(!clientMap[n])clientMap[n]={nombre:b.nombre,bonos:[]};
+        clientMap[n].bonos.push(b);
+      });
+      // For each client, find their renewal date
+      var renovaciones=[];
+      Object.values(clientMap).forEach(function(c){
+        // Sort bonos by fecha valor descending
+        var sorted=c.bonos.slice().sort(function(a,b){
+          var da=a.fechaValor?new Date(a.fechaValor):new Date(0);
+          var db=b.fechaValor?new Date(b.fechaValor):new Date(0);
+          return db-da;
+        });
+        var latest=sorted[0];
+        if(!latest.fechaValor)return;
+        var fv=new Date(latest.fechaValor);
+        if(isNaN(fv))return;
+        // Determine duration
+        var tipo=latest.tipoBono||latest.concepto||"";
+        var dias=0;
+        for(var key in duraciones){
+          if(tipo.toLowerCase().indexOf(key.toLowerCase())>=0){dias=duraciones[key];break;}
+        }
+        if(!dias)return; // bonos de sesiones sueltas, no tienen renovación fija
+        var fechaFin=new Date(fv);
+        fechaFin.setDate(fechaFin.getDate()+dias);
+        // Find the monday of the renewal week
+        var renewMonday=new Date(fechaFin);
+        var day=renewMonday.getDay();
+        var diff=day===0?1:day===1?0:8-day;
+        renewMonday.setDate(renewMonday.getDate()+diff);
+        // Pending sessions
+        var pendientes=latest.sinCanjear||0;
+        var enUso=latest.enUso||0;
+        var caducadas=latest.caducadas||0;
+        renovaciones.push({
+          nombre:c.nombre,
+          tipo:tipo,
+          fechaValor:fv,
+          fechaFin:fechaFin,
+          renewMonday:renewMonday,
+          totalSesiones:latest.totalSesiones,
+          usadas:latest.usadas,
+          sinCanjear:pendientes,
+          enUso:enUso,
+          caducadas:caducadas,
+          totalBonos:c.bonos.length
+        });
+      });
+      // Sort by renewal date
+      renovaciones.sort(function(a,b){return a.renewMonday-b.renewMonday;});
+      // Group by week
+      var now=new Date();
+      var thisMonday=new Date(now);
+      var d=thisMonday.getDay();
+      thisMonday.setDate(thisMonday.getDate()-(d===0?6:d-1));
+      thisMonday.setHours(0,0,0,0);
+      var weeks=[];
+      var weekMap={};
+      renovaciones.forEach(function(r){
+        var wk=new Date(r.renewMonday);
+        wk.setHours(0,0,0,0);
+        var key=wk.toISOString().split("T")[0];
+        if(!weekMap[key]){weekMap[key]={monday:wk,clients:[]};weeks.push(weekMap[key]);}
+        weekMap[key].clients.push(r);
+      });
+      weeks.sort(function(a,b){return a.monday-b.monday;});
+      // Filter: show past 2 weeks + future 6 weeks
+      var twoWeeksAgo=new Date(thisMonday);
+      twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14);
+      var sixWeeksAhead=new Date(thisMonday);
+      sixWeeksAhead.setDate(sixWeeksAhead.getDate()+42);
+      weeks=weeks.filter(function(w){return w.monday>=twoWeeksAgo&&w.monday<=sixWeeksAhead;});
+      if(!weeks.length)return<div style={Object.assign({},B,{padding:40,textAlign:"center"})}>
+        <div style={{fontSize:14,color:T.text2}}>No hay renovaciones próximas</div>
+      </div>;
+      return weeks.map(function(w){
+        var mStr=w.monday.toLocaleDateString("es-ES",{day:"numeric",month:"long"});
+        var endOfWeek=new Date(w.monday);
+        endOfWeek.setDate(endOfWeek.getDate()+6);
+        var eStr=endOfWeek.toLocaleDateString("es-ES",{day:"numeric",month:"long"});
+        var isThisWeek=w.monday.getTime()===thisMonday.getTime();
+        var isPast=w.monday<thisMonday;
+        var isNext=!isThisWeek&&!isPast&&(w.monday-thisMonday)<7*24*60*60*1000*2;
+        var label=isThisWeek?"📌 ESTA SEMANA":isPast?"⏪ PASADA":isNext?"⏩ PRÓXIMA SEMANA":"";
+        var borderColor=isThisWeek?"#6366f1":isPast?"#ef4444":isNext?"#f59e0b":T.border;
+        return<div key={w.monday.toISOString()} style={Object.assign({},B,{marginBottom:16,border:"1px solid "+borderColor+"50"})}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,display:"flex",justifyContent:"space-between",alignItems:"center",background:isThisWeek?"rgba(99,102,241,.05)":isPast?"rgba(239,68,68,.03)":"transparent"}}>
+            <div>
+              <span style={{fontSize:15,fontWeight:800,color:T.text}}>Semana {mStr} — {eStr}</span>
+              {label&&<span style={{marginLeft:10,fontSize:10,padding:"3px 8px",borderRadius:6,background:isThisWeek?"#6366f115":isPast?"#ef444415":"#f59e0b15",color:isThisWeek?"#818cf8":isPast?"#ef4444":"#f59e0b",fontWeight:700}}>{label}</span>}
+            </div>
+            <span style={{fontSize:12,color:T.text3,fontWeight:600}}>{w.clients.length} cliente{w.clients.length>1?"s":""}</span>
+          </div>
+          {w.clients.map(function(r,i){
+            var pct=r.totalSesiones>0?Math.round((r.usadas/r.totalSesiones)*100):0;
+            var tieneRecuperar=r.sinCanjear>0||r.caducadas>0;
+            return<div key={i} style={{padding:"12px 18px",borderBottom:"1px solid "+T.border,display:"flex",alignItems:"center",gap:14}}>
+              <div style={{width:40,height:40,borderRadius:10,background:tieneRecuperar?"#f59e0b15":"#22c55e15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{tieneRecuperar?"⚠️":"✅"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>{r.nombre}</div>
+                <div style={{fontSize:11,color:T.text3,marginTop:2}}>{r.tipo} · Valor: {r.fechaValor.toLocaleDateString("es-ES",{day:"numeric",month:"short"})}</div>
+                <div style={{display:"flex",gap:10,marginTop:4,fontSize:10,color:T.text2}}>
+                  <span>📊 {r.totalSesiones} total</span>
+                  <span style={{color:"#22c55e"}}>✅ {r.usadas} usadas</span>
+                  {r.sinCanjear>0&&<span style={{color:"#f59e0b"}}>🔄 {r.sinCanjear} sin canjear</span>}
+                  {r.caducadas>0&&<span style={{color:"#ef4444"}}>❌ {r.caducadas} caducadas</span>}
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:20,fontWeight:900,color:pct>=100?"#22c55e":pct>=50?"#f59e0b":"#ef4444"}}>{pct}%</div>
+                <div style={{fontSize:9,color:T.text3}}>consumido</div>
+              </div>
+            </div>;
+          })}
+        </div>;
+      });
+    })()}
   </div>}
 
   {mv==="horarios"&&<div>
