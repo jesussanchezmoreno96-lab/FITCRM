@@ -184,28 +184,30 @@ export default function Renovaciones(props) {
 
   // Build weeks from entries
   var weekMap = {};
-  var weekList = [];
   entries.forEach(function (e) {
     var key = e.renewMonday.toISOString().split("T")[0];
-    if (!weekMap[key]) { weekMap[key] = { monday: e.renewMonday, key: key, clients: [] }; weekList.push(weekMap[key]); }
+    if (!weekMap[key]) weekMap[key] = { monday: e.renewMonday, key: key, clients: [] };
     weekMap[key].clients.push(e);
   });
-  weekList.sort(function (a, b) { return a.monday - b.monday; });
 
-  // Show: 1 week back, current week, +2 weeks ahead (compact view)
-  var rangeStart = new Date(thisMonday); rangeStart.setDate(rangeStart.getDate() - 7);
-  var rangeEnd = new Date(thisMonday); rangeEnd.setDate(rangeEnd.getDate() + 63);
-  weekList = weekList.filter(function (w) { return w.monday >= rangeStart && w.monday <= rangeEnd; });
+  // ALWAYS create tabs for: 1 week back + current + 8 weeks ahead = 10 tabs
+  var weekList = [];
+  for (var wi = -1; wi <= 8; wi++) {
+    var mon = new Date(thisMonday);
+    mon.setDate(mon.getDate() + wi * 7);
+    var key = mon.toISOString().split("T")[0];
+    if (weekMap[key]) {
+      weekList.push(weekMap[key]);
+    } else {
+      weekList.push({ monday: mon, key: key, clients: [] });
+    }
+  }
 
   var getWeekLabel = function (w) {
-    var isThis = w.monday.getTime() === thisMonday.getTime();
-    var diffW = Math.round((w.monday - thisMonday) / (7 * 24 * 60 * 60 * 1000));
-    if (isThis) return "Esta semana";
-    if (diffW === -1) return "Sem. pasada";
-    if (diffW === 1) return "Próxima sem.";
-    if (diffW === 2) return "En 2 sem.";
-    if (diffW === 3) return "En 3 sem.";
-    return "Sem. " + fmtDate(w.monday);
+    // Show date: "13/04", "20/04", etc.
+    var d = w.monday.getDate();
+    var m = (w.monday.getMonth() + 1);
+    return (d < 10 ? "0" : "") + d + "/" + (m < 10 ? "0" : "") + m;
   };
 
   // Auto-select
