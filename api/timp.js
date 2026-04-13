@@ -1,5 +1,6 @@
 export default async function handler(req, res) {
   var path = req.query.path || "branch_buildings";
+  path = decodeURIComponent(path);
   var url = "https://api.timp.pro/api/timp/v1/" + path;
   
   try {

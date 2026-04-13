@@ -185,9 +185,11 @@ export default function App(){
 
   // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
   function syncBonos(){
+    var autoPath="branch_buildings/"+TIMP_CENTER+"/autopurchases?date_from=2025-01-01%26date_to=2027-01-01%26page=1";
+    var subsPath="branch_buildings/"+TIMP_CENTER+"/subscriptions?page=1";
     Promise.all([
-      timpFetch("autopurchases?date_from=2025-01-01&date_to=2027-01-01&page=1"),
-      timpFetch("subscriptions?page=1")
+      fetch("/api/timp?path="+autoPath).then(function(r){return r.json();}),
+      fetch("/api/timp?path="+subsPath).then(function(r){return r.json();})
     ]).then(function(results){
       var autoData=results[0];
       var subsData=results[1];
