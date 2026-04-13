@@ -183,6 +183,59 @@ export default function App(){
     }).catch(function(){setTimpSyncing(false);});
   }
 
+  // Auto-fetch bonos from TIMP API (autopurchases)
+  function syncBonos(){
+    var now=new Date();
+    var y=now.getFullYear();
+    var dateFrom=(y-1)+"-01-01";
+    var dateTo=(y+1)+"-01-01";
+    timpFetch("autopurchases?date_from="+dateFrom+"&date_to="+dateTo+"&page=1").then(function(data){
+      if(!data||!data.collection)return;
+      var autos=data.collection;
+      var subs=timpData||[];
+      var parsed=[];
+      autos.forEach(function(a){
+        if(a.removed)return;
+        var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
+        var nombre=sub?sub.full_name:"Desconocido";
+        var fechaValor=null;
+        var fechaFin=null;
+        if(a.available_at){
+          var parts=a.available_at.split("..");
+          if(parts.length===2){
+            fechaValor=new Date(parts[0].trim());
+            fechaFin=new Date(parts[1].trim());
+          }
+        }
+        var pagado=!!a.paid_at;
+        parsed.push({
+          nombre:nombre,
+          concepto:a.caption||"",
+          tipoBono:a.caption||"",
+          fechaValor:fechaValor?fechaValor.toISOString():"",
+          fechaFin:fechaFin?fechaFin.toISOString():"",
+          nextValidFrom:a.next_valid_from||"",
+          precio:parseFloat(a.final_price)||0,
+          pagado:pagado,
+          fechaPago:a.paid_at||"",
+          formaPago:a.payment_method||"",
+          suscriptionUuid:a.suscription_uuid||"",
+          serialNumber:a.serial_number||"",
+          totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
+          total:parseFloat(a.final_price)||0,
+          pendientePago:pagado?0:parseFloat(a.final_price)||0
+        });
+      });
+      setBonos(parsed);
+      dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // Auto-sync bonos when TIMP data is loaded
+  useEffect(function(){
+    if(timpData&&timpData.length>0){syncBonos();}
+  },[timpData]);
+
   // Import cuotas from TIMP Excel
   function importCuotas(e){
     var file=e.target.files[0];
