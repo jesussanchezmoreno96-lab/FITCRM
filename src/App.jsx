@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Horarios from "./Horarios.jsx";
 import AIAssistant from "./AIAssistant.jsx";
 import Dashboard from "./Dashboard.jsx";
+import Renovaciones from "./Renovaciones.jsx";
 
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -61,6 +62,7 @@ export default function App(){
   var bonos_=_([]),bonos=bonos_[0],setBonos=bonos_[1];
   var renWeek_=_("esta"),renWeek=renWeek_[0],setRenWeek=renWeek_[1];
   var renTicks_=_({}),renTicks=renTicks_[0],setRenTicks=renTicks_[1];
+  var renData_=_({}),renData=renData_[0],setRenData=renData_[1];
   // Theme
   var th_=_("dark"),theme=th_[0],setTheme=th_[1];
   var dk=theme==="dark";
@@ -71,7 +73,7 @@ export default function App(){
     dbGet("followups").then(function(r){if(r&&r.length>0)setFu(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("leads").then(function(r){if(r&&r.length>0)setLe(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("fisio_reports").then(function(r){if(r&&r.length>0)setFis(r.map(function(x){return x.data;}));}).catch(function(){});
-    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){if(x.id==="cuotas_vigentes")setBonos(x.data);if(x.id==="renovacion_ticks")setRenTicks(x.data);});}}).catch(function(){});
+    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){if(x.id==="cuotas_vigentes")setBonos(x.data);if(x.id==="renovacion_ticks")setRenTicks(x.data);if(x.id==="renovacion_data")setRenData(x.data);});}}).catch(function(){});
   },[]);
 
   // Auto-sync TIMP when clients are loaded
@@ -180,67 +182,6 @@ export default function App(){
       setTimpSyncing(false);
     }).catch(function(){setTimpSyncing(false);});
   }
-
-  // Auto-fetch autopurchases from TIMP API
-  function syncBonos(){
-    var now=new Date();
-    var y=now.getFullYear();
-    var dateFrom=(y-1)+"-01-01";
-    var dateTo=(y+1)+"-01-01";
-    timpFetch("autopurchases?date_from="+dateFrom+"&date_to="+dateTo+"&page=1").then(function(data){
-      if(!data||!data.collection)return;
-      var autos=data.collection;
-      // Also fetch purchases for payment info
-      timpFetch("purchases?date_from="+dateFrom+"&date_to="+dateTo+"&page=1").then(function(pdata){
-        var purchases=(pdata&&pdata.collection)||[];
-        // Get subscriptions for name mapping
-        var subs=timpData||[];
-        // Build bono data per client
-        var parsed=[];
-        autos.forEach(function(a){
-          if(a.removed)return;
-          // Find client name from subs
-          var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
-          var nombre=sub?sub.full_name:"Desconocido";
-          // Parse available_at range "2026-04-12 22:00:00 UTC..2026-05-10 21:59:59 UTC"
-          var fechaValor=null;
-          var fechaFin=null;
-          if(a.available_at){
-            var parts=a.available_at.split("..");
-            if(parts.length===2){
-              fechaValor=new Date(parts[0].trim());
-              fechaFin=new Date(parts[1].trim());
-            }
-          }
-          var pagado=!!a.paid_at;
-          parsed.push({
-            nombre:nombre,
-            concepto:a.caption||"",
-            tipoBono:a.caption||"",
-            fechaValor:fechaValor?fechaValor.toISOString():"",
-            fechaFin:fechaFin?fechaFin.toISOString():"",
-            nextValidFrom:a.next_valid_from||"",
-            precio:parseFloat(a.final_price)||0,
-            pagado:pagado,
-            fechaPago:a.paid_at||"",
-            formaPago:a.payment_method||"",
-            suscriptionUuid:a.suscription_uuid||"",
-            serialNumber:a.serial_number||"",
-            totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
-            total:parseFloat(a.final_price)||0,
-            pendientePago:pagado?0:parseFloat(a.final_price)||0
-          });
-        });
-        setBonos(parsed);
-        dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
-      }).catch(function(){});
-    }).catch(function(){});
-  }
-
-  // Auto-sync bonos when TIMP data is loaded
-  useEffect(function(){
-    if(timpData&&timpData.length>0){syncBonos();}
-  },[timpData]);
 
   // Import cuotas from TIMP Excel
   function importCuotas(e){
@@ -635,171 +576,25 @@ export default function App(){
     <div style={B}>{(function(){var ls=le.slice();if(lyear!=="todos")ls=ls.filter(function(l){return l.year===lyear;});if(lmonth!=="todos")ls=ls.filter(function(l){return l.month===lmonth;});if(lfl==="activos")ls=ls.filter(function(l){return l.status!=="alta"&&l.status!=="perdido";});else ls=ls.filter(function(l){return l.status===lfl;});if(!ls.length)return<div style={{padding:40,textAlign:"center",color:"#475569"}}>{le.length===0?"Añade tu primer lead":"Sin leads con estos filtros"}</div>;return ls.map(function(l){var st=LS.find(function(x){return x.v===l.status;})||LS[0];var isAlta=l.status==="alta";return<div key={l.id} style={{padding:"12px 18px",borderBottom:isAlta?"1px solid rgba(34,197,94,.15)":"1px solid #1e2330",display:"flex",alignItems:"center",gap:10,background:isAlta?"rgba(34,197,94,.08)":"transparent"}}><span style={{fontSize:18}}>{st.i}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:isAlta?"#22c55e":"#e2e8f0"}}>{l.name}{l.source?<span style={{fontSize:9,padding:"2px 5px",borderRadius:5,background:isAlta?"rgba(34,197,94,.15)":"#1e2330",color:isAlta?"#22c55e":"#94a3b8",marginLeft:6}}>{l.source}</span>:null}{l.month?<span style={{fontSize:9,padding:"2px 5px",borderRadius:5,background:T.bg3,color:"#64748b",marginLeft:4}}>{l.month} {l.year}</span>:null}</div><div style={{display:"flex",gap:10,fontSize:10,color:"#64748b"}}>{l.phone&&<span>📱 {l.phone}</span>}{l.contactDate&&<span>📅 {l.contactDate}</span>}{l.responsable&&<span>👤 {l.responsable}</span>}</div>{l.notes&&<div style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:400}}>{l.notes}</div>}</div><select value={l.status} onChange={function(e){var v=e.target.value;var u=Object.assign({},l,{status:v});setLe(function(p){return p.map(function(x){return x.id===l.id?u:x;});});saveLead(u);}} style={{padding:"4px 6px",background:st.c+"10",border:"1px solid "+st.c+"25",borderRadius:7,color:st.c,fontSize:9,fontWeight:600,outline:"none"}}>{LS.map(function(x){return<option key={x.v} value={x.v}>{x.i} {x.l}</option>;})}</select><button onClick={function(){setLe(function(p){return p.filter(function(x){return x.id!==l.id;});});deleteLead(l.id);}} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:12}}>🗑️</button></div>;});})()}</div>
   </div>}
 
-  {mv==="renovaciones"&&<div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
-      <h2 style={{margin:0,fontSize:24,fontWeight:800}}>🔄 Renovaciones</h2>
-      <label style={{padding:"8px 16px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:9,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-        📤 Importar Cuotas
-        <input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{display:"none"}}/>
-      </label>
-    </div>
-    {!bonos.length?<div style={Object.assign({},B,{padding:40,textAlign:"center"})}>
-      <div style={{fontSize:40,opacity:0.2,marginBottom:10}}>🔄</div>
-      <div style={{fontSize:14,fontWeight:600,color:T.text2}}>Cargando datos de TIMP...</div>
-      <div style={{fontSize:12,color:T.text3,marginTop:6}}>Los bonos se cargan automáticamente al sincronizar con TIMP</div>
-      <div style={{marginTop:12}}>
-        <label style={{padding:"8px 16px",background:T.bg3,border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-          📤 O importar Excel manualmente
-          <input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{display:"none"}}/>
-        </label>
-      </div>
-    </div>
-    :(function(){
-      var clientMap={};
-      bonos.forEach(function(b){
-        var n=b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-        if(!clientMap[n])clientMap[n]={nombre:b.nombre,bonos:[]};
-        clientMap[n].bonos.push(b);
-      });
-      var renovaciones=[];
-      Object.values(clientMap).forEach(function(c){
-        var sorted=c.bonos.slice().sort(function(a,b){
-          var da=a.fechaValor?new Date(a.fechaValor):new Date(0);
-          var db=b.fechaValor?new Date(b.fechaValor):new Date(0);
-          return db-da;
-        });
-        var latest=sorted[0];
-        if(!latest.fechaValor)return;
-        var fv=new Date(latest.fechaValor);
-        if(isNaN(fv))return;
-        var tipo=latest.tipoBono||latest.concepto||"";
-        // Semana de renovación = lunes de la semana de fecha de valor
-        var renewMonday=new Date(fv);
-        var dy=renewMonday.getDay();
-        renewMonday.setDate(renewMonday.getDate()-(dy===0?6:dy-1));
-        renewMonday.setHours(0,0,0,0);
-        // Check if next bono exists and is paid
-        var nextBono=null;
-        if(sorted.length>1){
-          nextBono=sorted[1]; // second most recent
-        }
-        // Check if bono is paid (from API: pagado field, or from Excel: pendientePago)
-        var bonoActualPagado=false;
-        if(latest.pagado!==undefined){
-          // From API: pagado is boolean
-          bonoActualPagado=!!latest.pagado;
-        }else{
-          // From Excel: check pendientePago and total
-          bonoActualPagado=latest.pendientePago===0&&latest.total&&latest.total>0;
-        }
-        var pendientePagoVal=latest.pendientePago||0;
-        var precio=latest.precio||latest.total||0;
-        renovaciones.push({
-          nombre:c.nombre,tipo:tipo,fechaValor:fv,renewMonday:renewMonday,
-          totalSesiones:latest.totalSesiones,usadas:latest.usadas,
-          sinCanjear:latest.sinCanjear||0,enUso:latest.enUso||0,caducadas:latest.caducadas||0,
-          renovado:bonoActualPagado,
-          pendientePago:bonoActualPagado?0:precio,
-          precio:precio
-        });
-      });
-      renovaciones.sort(function(a,b){return a.renewMonday-b.renewMonday;});
-      // Build weeks
-      var now=new Date();
-      var thisMonday=new Date(now);
-      var d=thisMonday.getDay();
-      thisMonday.setDate(thisMonday.getDate()-(d===0?6:d-1));
-      thisMonday.setHours(0,0,0,0);
-      var weekMap={};var weekList=[];
-      renovaciones.forEach(function(r){
-        var wk=new Date(r.renewMonday);wk.setHours(0,0,0,0);
-        var key=wk.toISOString().split("T")[0];
-        if(!weekMap[key]){weekMap[key]={monday:wk,key:key,clients:[]};weekList.push(weekMap[key]);}
-        weekMap[key].clients.push(r);
-      });
-      weekList.sort(function(a,b){return a.monday-b.monday;});
-      // Filter range: 2 weeks back + 8 weeks ahead
-      var rangeStart=new Date(thisMonday);rangeStart.setDate(rangeStart.getDate()-14);
-      var rangeEnd=new Date(thisMonday);rangeEnd.setDate(rangeEnd.getDate()+63);
-      weekList=weekList.filter(function(w){return w.monday>=rangeStart&&w.monday<=rangeEnd;});
-      // Week tabs
-      var getWeekLabel=function(w){
-        var isThis=w.monday.getTime()===thisMonday.getTime();
-        var isPast=w.monday<thisMonday;
-        var diffW=Math.round((w.monday-thisMonday)/(7*24*60*60*1000));
-        if(isThis)return"Esta semana";
-        if(diffW===-1)return"Sem. pasada";
-        if(diffW===-2)return"Hace 2 sem.";
-        if(diffW===1)return"Próxima sem.";
-        var d=w.monday.toLocaleDateString("es-ES",{day:"numeric",month:"short"});
-        return"Sem. "+d;
-      };
-      // Auto-select "esta" week if exists
-      var selWeek=weekList.find(function(w){return w.key===renWeek;});
-      if(!selWeek){
-        var thisW=weekList.find(function(w){return w.monday.getTime()===thisMonday.getTime();});
-        selWeek=thisW||weekList[0];
-        if(selWeek&&selWeek.key!==renWeek)setRenWeek(selWeek.key);
-      }
-      return<div>
-        {/* Week tabs */}
-        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:16}}>
-          {weekList.map(function(w){
-            var active=selWeek&&w.key===selWeek.key;
-            var isThis=w.monday.getTime()===thisMonday.getTime();
-            var isPast=w.monday<thisMonday;
-            var color=isThis?"#6366f1":isPast?"#ef4444":"#f59e0b";
-            return<button key={w.key} onClick={function(){setRenWeek(w.key);}} style={{padding:"6px 14px",borderRadius:8,border:active?"1px solid "+color:"1px solid "+T.border,background:active?color+"15":"transparent",color:active?color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>{getWeekLabel(w)} ({w.clients.length})</button>;
-          })}
-        </div>
-        {/* Selected week content */}
-        {selWeek&&<div>
-          <div style={{fontSize:13,color:T.text2,marginBottom:12}}>
-            {selWeek.monday.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})} — {(function(){var e=new Date(selWeek.monday);e.setDate(e.getDate()+6);return e.toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"});})()}
-          </div>
-          <div style={B}>
-            {selWeek.clients.map(function(r,i){
-              var pct=r.totalSesiones>0?Math.round((r.usadas/r.totalSesiones)*100):0;
-              var tieneRecuperar=r.sinCanjear>0||r.caducadas>0;
-              // Check manual tick (key = nombre + week)
-              var tickKey=r.nombre.toLowerCase().trim()+"_"+selWeek.key;
-              var isManualTick=renTicks[tickKey]===true;
-              var showTick=r.renovado||isManualTick;
-              return<div key={i} style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,display:"flex",alignItems:"center",gap:14}}>
-                {/* Tick: clickable to toggle manually */}
-                <button onClick={function(){
-                  var newTicks=Object.assign({},renTicks);
-                  if(isManualTick){delete newTicks[tickKey];}
-                  else{newTicks[tickKey]=true;}
-                  setRenTicks(newTicks);
-                  dbSave("bonos_timp","renovacion_ticks",newTicks).catch(function(){});
-                }} style={{width:36,height:36,borderRadius:9,border:showTick?"2px solid #22c55e":"2px solid "+T.border2,background:showTick?"#22c55e15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:showTick?"#22c55e":T.text3,flexShrink:0,cursor:"pointer",padding:0}}>{showTick?"✓":""}</button>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:14,fontWeight:700,color:T.text}}>{r.nombre}</span>
-                    {tieneRecuperar&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#f59e0b15",color:"#f59e0b",fontWeight:700}}>⚠️ Sesiones pendientes</span>}
-                    {!showTick&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Pendiente cobro</span>}
-                    {r.pendientePago>0&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Debe {r.pendientePago}€</span>}
-                  </div>
-                  <div style={{fontSize:11,color:T.text3,marginTop:3}}>{r.tipo} · Inicio: {r.fechaValor.toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})}</div>
-                  <div style={{display:"flex",gap:10,marginTop:4,fontSize:10,color:T.text2}}>
-                    <span>📊 {r.usadas}/{r.totalSesiones}</span>
-                    {r.sinCanjear>0&&<span style={{color:"#f59e0b"}}>🔄 {r.sinCanjear} sin canjear</span>}
-                    {r.caducadas>0&&<span style={{color:"#ef4444"}}>❌ {r.caducadas} caducadas</span>}
-                    {r.enUso>0&&<span style={{color:"#3b82f6"}}>▶️ {r.enUso} en uso</span>}
-                  </div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:20,fontWeight:900,color:pct>=100?"#22c55e":pct>=50?"#f59e0b":"#ef4444"}}>{pct}%</div>
-                  <div style={{fontSize:9,color:T.text3}}>consumido</div>
-                </div>
-              </div>;
-            })}
-          </div>
-        </div>}
-      </div>;
-    })()}
-  </div>}
+
+  {mv==="renovaciones"&&<Renovaciones
+    theme={T}
+    dk={dk}
+    bonos={bonos}
+    clients={cl}
+    renData={renData}
+    setRenData={setRenData}
+    onSaveRenData={function(newData){
+      dbSave("bonos_timp","renovacion_data",newData).catch(function(){});
+    }}
+    onChangeStatus={function(name,status){
+      sv(function(p){return p.map(function(c){
+        return c.name.toLowerCase().indexOf(name.toLowerCase())>=0
+          ? Object.assign({},c,{status:status}) : c;
+      });});
+    }}
+    importCuotas={importCuotas}
+  />}
 
   {mv==="horarios"&&<div>
     <h2 style={{margin:"0 0 20px",fontSize:24,fontWeight:800}}>📅 Horarios</h2>
