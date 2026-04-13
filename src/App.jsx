@@ -621,12 +621,25 @@ export default function App(){
         var dy=renewMonday.getDay();
         var diff=dy===0?1:dy===1?0:8-dy;
         renewMonday.setDate(renewMonday.getDate()+diff);
-        var pagado=latest.pendientePago===0||!latest.pendientePago;
+        // Tick = has a NEXT bono with fecha valor after current bono ends AND that bono is paid
+        var siguienteBono=sorted.length>1?null:null;
+        // Look for a bono that starts after or on fechaFin
+        var nextBono=c.bonos.find(function(b){
+          if(!b.fechaValor)return false;
+          var bfv=new Date(b.fechaValor);
+          return bfv>=fechaFin&&b!==latest;
+        });
+        // Also check: if latest bono itself has pendientePago > 0, it's not paid
+        var bonoActualPagado=!latest.pendientePago||latest.pendientePago===0;
+        var renovado=!!nextBono&&(!nextBono.pendientePago||nextBono.pendientePago===0);
+        var pendientePagoActual=latest.pendientePago||0;
+        var pendientePagoNext=nextBono?nextBono.pendientePago||0:0;
         renovaciones.push({
           nombre:c.nombre,tipo:tipo,fechaValor:fv,fechaFin:fechaFin,renewMonday:renewMonday,
           totalSesiones:latest.totalSesiones,usadas:latest.usadas,
           sinCanjear:latest.sinCanjear||0,enUso:latest.enUso||0,caducadas:latest.caducadas||0,
-          pagado:pagado,pendientePago:latest.pendientePago||0
+          renovado:renovado,bonoActualPagado:bonoActualPagado,
+          pendientePago:pendientePagoActual+pendientePagoNext
         });
       });
       renovaciones.sort(function(a,b){return a.renewMonday-b.renewMonday;});
@@ -688,13 +701,14 @@ export default function App(){
               var pct=r.totalSesiones>0?Math.round((r.usadas/r.totalSesiones)*100):0;
               var tieneRecuperar=r.sinCanjear>0||r.caducadas>0;
               return<div key={i} style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,display:"flex",alignItems:"center",gap:14}}>
-                {/* Tick only if paid */}
-                <div style={{width:36,height:36,borderRadius:9,border:r.pagado?"2px solid #22c55e":"2px solid "+T.border2,background:r.pagado?"#22c55e15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:r.pagado?"#22c55e":T.text3,flexShrink:0}}>{r.pagado?"✓":""}</div>
+                {/* Tick only if next bono exists and is paid */}
+                <div style={{width:36,height:36,borderRadius:9,border:r.renovado?"2px solid #22c55e":"2px solid "+T.border2,background:r.renovado?"#22c55e15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:r.renovado?"#22c55e":T.text3,flexShrink:0}}>{r.renovado?"✓":""}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:14,fontWeight:700,color:T.text}}>{r.nombre}</span>
                     {tieneRecuperar&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#f59e0b15",color:"#f59e0b",fontWeight:700}}>⚠️ Sesiones pendientes</span>}
-                    {!r.pagado&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Pendiente pago</span>}
+                    {!r.renovado&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>🔄 Pendiente renovar</span>}
+                    {r.pendientePago>0&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Debe {r.pendientePago}€</span>}
                   </div>
                   <div style={{fontSize:11,color:T.text3,marginTop:3}}>{r.tipo}</div>
                   <div style={{display:"flex",gap:10,marginTop:4,fontSize:10,color:T.text2}}>
