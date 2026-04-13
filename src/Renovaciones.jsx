@@ -194,7 +194,7 @@ export default function Renovaciones(props) {
 
   // Show: 1 week back, current week, +2 weeks ahead (compact view)
   var rangeStart = new Date(thisMonday); rangeStart.setDate(rangeStart.getDate() - 7);
-  var rangeEnd = new Date(thisMonday); rangeEnd.setDate(rangeEnd.getDate() + 21);
+  var rangeEnd = new Date(thisMonday); rangeEnd.setDate(rangeEnd.getDate() + 63);
   weekList = weekList.filter(function (w) { return w.monday >= rangeStart && w.monday <= rangeEnd; });
 
   var getWeekLabel = function (w) {
@@ -204,6 +204,7 @@ export default function Renovaciones(props) {
     if (diffW === -1) return "Sem. pasada";
     if (diffW === 1) return "Próxima sem.";
     if (diffW === 2) return "En 2 sem.";
+    if (diffW === 3) return "En 3 sem.";
     return "Sem. " + fmtDate(w.monday);
   };
 
