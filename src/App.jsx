@@ -183,19 +183,22 @@ export default function App(){
     }).catch(function(){setTimpSyncing(false);});
   }
 
-  // Auto-fetch bonos from TIMP API (autopurchases)
-  // Trae TODOS los autopurchases — el componente Renovaciones agrupa por semana
+  // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
   function syncBonos(){
-    timpFetch("autopurchases?date_from=2025-01-01&date_to=2027-01-01&page=1").then(function(data){
-      if(!data||!data.collection)return;
-      var autos=data.collection;
-      var subs=timpData||[];
+    Promise.all([
+      timpFetch("autopurchases?date_from=2025-01-01&date_to=2027-01-01&page=1"),
+      timpFetch("subscriptions?page=1")
+    ]).then(function(results){
+      var autoData=results[0];
+      var subsData=results[1];
+      if(!autoData||!autoData.collection)return;
+      var autos=autoData.collection;
+      var subs=(subsData&&subsData.collection)||[];
       var parsed=[];
       autos.forEach(function(a){
         if(a.removed)return;
         var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
-        var nombre=sub?sub.full_name:"Desconocido";
-        if(nombre==="Desconocido")return;
+        if(!sub||!sub.full_name)return;
         var fechaValor=null;var fechaFin=null;
         if(a.available_at){
           var parts=a.available_at.split("..");
@@ -204,10 +207,9 @@ export default function App(){
         if(!fechaValor||isNaN(fechaValor))return;
         var pagado=!!a.paid_at;
         parsed.push({
-          nombre:nombre,concepto:a.caption||"",tipoBono:a.caption||"",
+          nombre:sub.full_name,concepto:a.caption||"",tipoBono:a.caption||"",
           fechaValor:fechaValor.toISOString(),
           fechaFin:fechaFin?fechaFin.toISOString():"",
-          nextValidFrom:a.next_valid_from||"",
           precio:parseFloat(a.final_price)||0,pagado:pagado,
           fechaPago:a.paid_at||"",formaPago:a.payment_method||"",
           suscriptionUuid:a.suscription_uuid||"",
@@ -221,10 +223,15 @@ export default function App(){
     }).catch(function(){});
   }
 
-  // Auto-sync bonos when TIMP data is loaded
+  // Auto-sync bonos: when TIMP syncs OR when app loads with clients
   useEffect(function(){
     if(timpData&&timpData.length>0){syncBonos();}
   },[timpData]);
+
+  // Also sync bonos on initial load (doesn't need timpData anymore since it fetches subs itself)
+  useEffect(function(){
+    if(ld){syncBonos();}
+  },[ld]);
 
   // Import cuotas from TIMP Excel
   function importCuotas(e){
