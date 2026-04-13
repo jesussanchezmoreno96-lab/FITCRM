@@ -148,6 +148,34 @@ export default function Renovaciones(props) {
     weekMap[key].clients.push(e);
   });
 
+  // Add "segundo pago" entries from renData (created when someone selects "mitad pagada")
+  Object.keys(renData).forEach(function (k) {
+    var d = renData[k];
+    if (!d || !d.segundoPago || !d.clientName) return;
+    var weekKey = k.split("__")[1];
+    if (!weekKey) return;
+    // Check if this client already exists in that week
+    if (weekMap[weekKey]) {
+      var already = weekMap[weekKey].clients.some(function (c) { return c.nombre.toLowerCase().trim() === d.clientName.toLowerCase().trim(); });
+      if (already) return;
+    }
+    // Find original client data for price
+    var origClient = entries.find(function (e) { return e.nombre.toLowerCase().trim() === d.clientName.toLowerCase().trim(); });
+    var mon = new Date(weekKey + "T00:00:00");
+    if (isNaN(mon)) return;
+    if (!weekMap[weekKey]) weekMap[weekKey] = { monday: mon, key: weekKey, clients: [] };
+    weekMap[weekKey].clients.push({
+      nombre: d.clientName,
+      tipo: origClient ? origClient.tipo : "",
+      precio: origClient ? origClient.precio : 0,
+      pagado: false, fechaPago: "",
+      renewMonday: mon, fechaValor: mon, fechaFin: null,
+      source: "segundo_pago", nextBooking: origClient ? origClient.nextBooking : null,
+      clientId: origClient ? origClient.clientId : null,
+      clientStatus: origClient ? origClient.clientStatus : null
+    });
+  });
+
   // Fixed tabs: 1 back + current + 8 ahead
   var weekList = [];
   for (var wi = -1; wi <= 8; wi++) {
@@ -265,54 +293,67 @@ export default function Renovaciones(props) {
       {selWeek.clients.map(function (r, i) {
         var data = rd(r.nombre, selWeek.key);
         var isRenovado = data.renovacion === "renovado" || r.pagado;
+        var isMitad = data.renovacion === "mitad";
         var isBaja = data.renovacion === "baja";
-        var isPending = !isRenovado && !isBaja;
+        var isPending = !isRenovado && !isBaja && !isMitad;
         var noteKey = rk(r.nombre, selWeek.key);
         var isEditingNote = editNote === noteKey;
-
-        var initials = r.nombre.split(" ").map(function (x) { return x[0]; }).slice(0, 2).join("");
 
         var rowBg = "transparent";
         if (isBaja) rowBg = dk ? "rgba(239,68,68,.04)" : "#fef2f2";
         if (isRenovado) rowBg = dk ? "rgba(34,197,94,.04)" : "#f0fdf4";
+        if (isMitad) rowBg = dk ? "rgba(99,102,241,.04)" : "#f0f0ff";
 
         // Status color
-        var stColor = isRenovado ? "#22c55e" : isBaja ? "#ef4444" : "#f59e0b";
+        var stColor = isRenovado ? "#22c55e" : isMitad ? "#6366f1" : isBaja ? "#ef4444" : "#f59e0b";
         var stBg = stColor + "12";
         var stBorder = stColor + "35";
+
+        // Is this a "segundo pago" entry?
+        var isSegundoPago = r.source === "segundo_pago";
 
         return <div key={i} style={{
           padding: "16px 20px", borderBottom: "1px solid " + T.border,
           background: rowBg, opacity: isBaja ? 0.5 : 1
         }}>
-          {/* Row: name + status + price */}
+          {/* Row: name + price + status */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-            {/* Avatar */}
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: stBg, border: "2px solid " + stBorder,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, fontWeight: 800, color: stColor, flexShrink: 0
-            }}>{initials}</div>
 
             {/* Name + price */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <div style={{
                 fontSize: 15, fontWeight: 700, color: T.text,
                 textDecoration: isBaja ? "line-through" : "none"
               }}>{r.nombre}</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 2 }}>
-                <span style={{ fontSize: 12, color: T.text3 }}>{r.precio}€</span>
-                {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
-              </div>
+              <span style={{ fontSize: 18, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : r.precio + "€"}</span>
+              {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
+              {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
             </div>
 
             {/* STATUS — big select */}
             <select
               value={r.pagado ? "renovado" : (data.renovacion || "pendiente")}
               onChange={function (e) {
-                upd(r.nombre, selWeek.key, "renovacion", e.target.value);
-                if (e.target.value === "baja" && r.clientId && r.clientStatus !== "baja") {
+                var val = e.target.value;
+                upd(r.nombre, selWeek.key, "renovacion", val);
+
+                // If "mitad pagada" → create entry 6 weeks later for 2nd payment
+                if (val === "mitad") {
+                  var sixWeeks = new Date(selWeek.monday);
+                  sixWeeks.setDate(sixWeeks.getDate() + 42);
+                  var spKey = sixWeeks.toISOString().split("T")[0];
+                  var spRk = r.nombre.toLowerCase().trim() + "__" + spKey;
+                  // Only create if not already there
+                  var existing = renData[spRk];
+                  if (!existing || !existing.notas) {
+                    var newData = Object.assign({}, renData);
+                    newData[spRk] = { notas: "2º pago trimestral (mitad restante: " + Math.round(r.precio / 2) + "€)", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
+                    if (setRenData) setRenData(newData);
+                    if (onSaveRenData) onSaveRenData(newData);
+                  }
+                }
+
+                if (val === "baja" && r.clientId && r.clientStatus !== "baja") {
                   if (confirm("¿Dar de baja a " + r.nombre + " en el CRM?")) {
                     if (onChangeStatus) onChangeStatus(r.nombre, "baja");
                   }
@@ -324,10 +365,11 @@ export default function Renovaciones(props) {
                 outline: "none", cursor: r.pagado ? "default" : "pointer",
                 border: "2px solid " + stBorder,
                 background: stBg, color: stColor,
-                minWidth: 150, flexShrink: 0
+                minWidth: 160, flexShrink: 0
               }}
             >
               <option value="pendiente">⏳ Pendiente</option>
+              <option value="mitad">💰 Mitad pagada</option>
               <option value="renovado">✅ Renovado</option>
               <option value="baja">🚫 No renueva</option>
             </select>
@@ -346,7 +388,7 @@ export default function Renovaciones(props) {
           </div>
 
           {/* Notes — always visible, click to edit */}
-          <div style={{ marginLeft: 52 }}>
+          <div>
             {isEditingNote ? (
               <div style={{ display: "flex", gap: 6 }}>
                 <input
