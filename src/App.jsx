@@ -181,6 +181,67 @@ export default function App(){
     }).catch(function(){setTimpSyncing(false);});
   }
 
+  // Auto-fetch autopurchases from TIMP API
+  function syncBonos(){
+    var now=new Date();
+    var y=now.getFullYear();
+    var dateFrom=(y-1)+"-01-01";
+    var dateTo=(y+1)+"-01-01";
+    timpFetch("autopurchases?date_from="+dateFrom+"&date_to="+dateTo+"&page=1").then(function(data){
+      if(!data||!data.collection)return;
+      var autos=data.collection;
+      // Also fetch purchases for payment info
+      timpFetch("purchases?date_from="+dateFrom+"&date_to="+dateTo+"&page=1").then(function(pdata){
+        var purchases=(pdata&&pdata.collection)||[];
+        // Get subscriptions for name mapping
+        var subs=timpData||[];
+        // Build bono data per client
+        var parsed=[];
+        autos.forEach(function(a){
+          if(a.removed)return;
+          // Find client name from subs
+          var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
+          var nombre=sub?sub.full_name:"Desconocido";
+          // Parse available_at range "2026-04-12 22:00:00 UTC..2026-05-10 21:59:59 UTC"
+          var fechaValor=null;
+          var fechaFin=null;
+          if(a.available_at){
+            var parts=a.available_at.split("..");
+            if(parts.length===2){
+              fechaValor=new Date(parts[0].trim());
+              fechaFin=new Date(parts[1].trim());
+            }
+          }
+          var pagado=!!a.paid_at;
+          parsed.push({
+            nombre:nombre,
+            concepto:a.caption||"",
+            tipoBono:a.caption||"",
+            fechaValor:fechaValor?fechaValor.toISOString():"",
+            fechaFin:fechaFin?fechaFin.toISOString():"",
+            nextValidFrom:a.next_valid_from||"",
+            precio:parseFloat(a.final_price)||0,
+            pagado:pagado,
+            fechaPago:a.paid_at||"",
+            formaPago:a.payment_method||"",
+            suscriptionUuid:a.suscription_uuid||"",
+            serialNumber:a.serial_number||"",
+            totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
+            total:parseFloat(a.final_price)||0,
+            pendientePago:pagado?0:parseFloat(a.final_price)||0
+          });
+        });
+        setBonos(parsed);
+        dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
+      }).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // Auto-sync bonos when TIMP data is loaded
+  useEffect(function(){
+    if(timpData&&timpData.length>0){syncBonos();}
+  },[timpData]);
+
   // Import cuotas from TIMP Excel
   function importCuotas(e){
     var file=e.target.files[0];
@@ -583,9 +644,15 @@ export default function App(){
       </label>
     </div>
     {!bonos.length?<div style={Object.assign({},B,{padding:40,textAlign:"center"})}>
-      <div style={{fontSize:40,opacity:0.2,marginBottom:10}}>📤</div>
-      <div style={{fontSize:14,fontWeight:600,color:T.text2}}>Importa las cuotas vigentes de TIMP</div>
-      <div style={{fontSize:12,color:T.text3,marginTop:6}}>TIMP → Reportes → Cuotas vigentes → Generar reporte</div>
+      <div style={{fontSize:40,opacity:0.2,marginBottom:10}}>🔄</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text2}}>Cargando datos de TIMP...</div>
+      <div style={{fontSize:12,color:T.text3,marginTop:6}}>Los bonos se cargan automáticamente al sincronizar con TIMP</div>
+      <div style={{marginTop:12}}>
+        <label style={{padding:"8px 16px",background:T.bg3,border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+          📤 O importar Excel manualmente
+          <input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{display:"none"}}/>
+        </label>
+      </div>
     </div>
     :(function(){
       var clientMap={};
@@ -616,15 +683,24 @@ export default function App(){
         if(sorted.length>1){
           nextBono=sorted[1]; // second most recent
         }
-        var bonoActualPagado=latest.pendientePago===0&&latest.total&&latest.total>0;
+        // Check if bono is paid (from API: pagado field, or from Excel: pendientePago)
+        var bonoActualPagado=false;
+        if(latest.pagado!==undefined){
+          // From API: pagado is boolean
+          bonoActualPagado=!!latest.pagado;
+        }else{
+          // From Excel: check pendientePago and total
+          bonoActualPagado=latest.pendientePago===0&&latest.total&&latest.total>0;
+        }
         var pendientePagoVal=latest.pendientePago||0;
-        var precioTotal=latest.total||0;
+        var precio=latest.precio||latest.total||0;
         renovaciones.push({
           nombre:c.nombre,tipo:tipo,fechaValor:fv,renewMonday:renewMonday,
           totalSesiones:latest.totalSesiones,usadas:latest.usadas,
           sinCanjear:latest.sinCanjear||0,enUso:latest.enUso||0,caducadas:latest.caducadas||0,
           renovado:bonoActualPagado,
-          pendientePago:pendientePagoVal
+          pendientePago:bonoActualPagado?0:precio,
+          precio:precio
         });
       });
       renovaciones.sort(function(a,b){return a.renewMonday-b.renewMonday;});
