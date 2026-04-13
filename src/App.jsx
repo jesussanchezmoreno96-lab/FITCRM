@@ -185,8 +185,8 @@ export default function App(){
 
   // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
   function syncBonos(){
-    var autoPath="branch_buildings/"+TIMP_CENTER+"/autopurchases?date_from=2025-01-01%26date_to=2027-01-01%26page=1";
-    var subsPath="branch_buildings/"+TIMP_CENTER+"/subscriptions?page=1";
+    var autoPath="branch_buildings/"+TIMP_CENTER+"/autopurchases%3Fdate_from=2025-01-01%26date_to=2027-01-01%26page=1";
+    var subsPath="branch_buildings/"+TIMP_CENTER+"/subscriptions%3Fpage=1";
     Promise.all([
       fetch("/api/timp?path="+autoPath).then(function(r){return r.json();}),
       fetch("/api/timp?path="+subsPath).then(function(r){return r.json();})
@@ -220,9 +220,10 @@ export default function App(){
           pendientePago:pagado?0:parseFloat(a.final_price)||0
         });
       });
+      console.log("[syncBonos] Parsed "+parsed.length+" bonos from API");
       setBonos(parsed);
       dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
-    }).catch(function(){});
+    }).catch(function(err){console.error("[syncBonos] Error:",err);});
   }
 
   // Auto-sync bonos: when TIMP syncs OR when app loads with clients
