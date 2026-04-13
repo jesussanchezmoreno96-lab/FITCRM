@@ -70,6 +70,7 @@ export default function App(){
     dbGet("followups").then(function(r){if(r&&r.length>0)setFu(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("leads").then(function(r){if(r&&r.length>0)setLe(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("fisio_reports").then(function(r){if(r&&r.length>0)setFis(r.map(function(x){return x.data;}));}).catch(function(){});
+    dbGet("bonos_timp").then(function(r){if(r&&r.length>0)setBonos(r[0].data);}).catch(function(){});
   },[]);
 
   // Auto-sync TIMP when clients are loaded
@@ -225,7 +226,8 @@ export default function App(){
           });
         }
         setBonos(parsed);
-        alert("✅ "+parsed.length+" registros de cuotas importados");
+        dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
+        alert("✅ "+parsed.length+" registros de cuotas importados y guardados");
       }catch(err){alert("Error: "+err.message);}
     };
     reader.readAsArrayBuffer(file);
@@ -585,13 +587,6 @@ export default function App(){
       <div style={{fontSize:12,color:T.text3,marginTop:6}}>TIMP → Reportes → Cuotas vigentes → Generar reporte</div>
     </div>
     :(function(){
-      var duraciones={
-        "Time partner":28,"Time partner plus":28,"Time pro+":28,"Entrenamiento sesión":0,
-        "Time partner trimestral":84,"Time partner plus trimestral":84,
-        "Time partner pro":28,"Time partner pro trimestral":84,
-        "Time pro trimestral+":84,
-        "Bono 10 Sesiones Duales":0,"Bono 20 sesiones duales":0,"Bono 5 sesiones duales":0
-      };
       var clientMap={};
       bonos.forEach(function(b){
         var n=b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -610,36 +605,25 @@ export default function App(){
         var fv=new Date(latest.fechaValor);
         if(isNaN(fv))return;
         var tipo=latest.tipoBono||latest.concepto||"";
-        var dias=0;
-        for(var key in duraciones){
-          if(tipo.toLowerCase().indexOf(key.toLowerCase())>=0){dias=duraciones[key];break;}
-        }
-        if(!dias)return;
-        var fechaFin=new Date(fv);
-        fechaFin.setDate(fechaFin.getDate()+dias);
-        var renewMonday=new Date(fechaFin);
+        // Semana de renovación = lunes de la semana de fecha de valor
+        var renewMonday=new Date(fv);
         var dy=renewMonday.getDay();
-        var diff=dy===0?1:dy===1?0:8-dy;
-        renewMonday.setDate(renewMonday.getDate()+diff);
-        // Tick = has a NEXT bono with fecha valor after current bono ends AND that bono is paid
-        var nextBono=c.bonos.find(function(b){
-          if(!b.fechaValor)return false;
-          var bfv=new Date(b.fechaValor);
-          return bfv>=fechaFin&&b!==latest;
-        });
-        var bonoActualPagado=!latest.pendientePago||latest.pendientePago===0;
-        var renovado=!!nextBono&&(!nextBono.pendientePago||nextBono.pendientePago===0);
-        var pendientePagoActual=latest.pendientePago||0;
-        var pendientePagoNext=nextBono?nextBono.pendientePago||0:0;
-        // Si tiene sesiones "en uso", el bono sigue activo → no le toca renovar aún
-        var enUsoVal=latest.enUso||0;
-        if(enUsoVal>0)return;
+        renewMonday.setDate(renewMonday.getDate()-(dy===0?6:dy-1));
+        renewMonday.setHours(0,0,0,0);
+        // Check if next bono exists and is paid
+        var nextBono=null;
+        if(sorted.length>1){
+          nextBono=sorted[1]; // second most recent
+        }
+        var bonoActualPagado=latest.pendientePago===0&&latest.total&&latest.total>0;
+        var pendientePagoVal=latest.pendientePago||0;
+        var precioTotal=latest.total||0;
         renovaciones.push({
-          nombre:c.nombre,tipo:tipo,fechaValor:fv,fechaFin:fechaFin,renewMonday:renewMonday,
+          nombre:c.nombre,tipo:tipo,fechaValor:fv,renewMonday:renewMonday,
           totalSesiones:latest.totalSesiones,usadas:latest.usadas,
-          sinCanjear:latest.sinCanjear||0,enUso:0,caducadas:latest.caducadas||0,
-          renovado:renovado,bonoActualPagado:bonoActualPagado,
-          pendientePago:pendientePagoActual+pendientePagoNext
+          sinCanjear:latest.sinCanjear||0,enUso:latest.enUso||0,caducadas:latest.caducadas||0,
+          renovado:bonoActualPagado,
+          pendientePago:pendientePagoVal
         });
       });
       renovaciones.sort(function(a,b){return a.renewMonday-b.renewMonday;});
@@ -707,10 +691,10 @@ export default function App(){
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:14,fontWeight:700,color:T.text}}>{r.nombre}</span>
                     {tieneRecuperar&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#f59e0b15",color:"#f59e0b",fontWeight:700}}>⚠️ Sesiones pendientes</span>}
-                    {!r.renovado&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>🔄 Pendiente renovar</span>}
+                    {!r.renovado&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Pendiente cobro</span>}
                     {r.pendientePago>0&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Debe {r.pendientePago}€</span>}
                   </div>
-                  <div style={{fontSize:11,color:T.text3,marginTop:3}}>{r.tipo}</div>
+                  <div style={{fontSize:11,color:T.text3,marginTop:3}}>{r.tipo} · Inicio: {r.fechaValor.toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})}</div>
                   <div style={{display:"flex",gap:10,marginTop:4,fontSize:10,color:T.text2}}>
                     <span>📊 {r.usadas}/{r.totalSesiones}</span>
                     {r.sinCanjear>0&&<span style={{color:"#f59e0b"}}>🔄 {r.sinCanjear} sin canjear</span>}
