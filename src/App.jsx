@@ -60,6 +60,7 @@ export default function App(){
   // Bonos TIMP
   var bonos_=_([]),bonos=bonos_[0],setBonos=bonos_[1];
   var renWeek_=_("esta"),renWeek=renWeek_[0],setRenWeek=renWeek_[1];
+  var renTicks_=_({}),renTicks=renTicks_[0],setRenTicks=renTicks_[1];
   // Theme
   var th_=_("dark"),theme=th_[0],setTheme=th_[1];
   var dk=theme==="dark";
@@ -70,7 +71,7 @@ export default function App(){
     dbGet("followups").then(function(r){if(r&&r.length>0)setFu(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("leads").then(function(r){if(r&&r.length>0)setLe(r.map(function(x){return x.data;}));}).catch(function(){});
     dbGet("fisio_reports").then(function(r){if(r&&r.length>0)setFis(r.map(function(x){return x.data;}));}).catch(function(){});
-    dbGet("bonos_timp").then(function(r){if(r&&r.length>0)setBonos(r[0].data);}).catch(function(){});
+    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){if(x.id==="cuotas_vigentes")setBonos(x.data);if(x.id==="renovacion_ticks")setRenTicks(x.data);});}}).catch(function(){});
   },[]);
 
   // Auto-sync TIMP when clients are loaded
@@ -641,9 +642,9 @@ export default function App(){
         weekMap[key].clients.push(r);
       });
       weekList.sort(function(a,b){return a.monday-b.monday;});
-      // Filter range
+      // Filter range: 2 weeks back + 8 weeks ahead
       var rangeStart=new Date(thisMonday);rangeStart.setDate(rangeStart.getDate()-14);
-      var rangeEnd=new Date(thisMonday);rangeEnd.setDate(rangeEnd.getDate()+56);
+      var rangeEnd=new Date(thisMonday);rangeEnd.setDate(rangeEnd.getDate()+63);
       weekList=weekList.filter(function(w){return w.monday>=rangeStart&&w.monday<=rangeEnd;});
       // Week tabs
       var getWeekLabel=function(w){
@@ -684,14 +685,24 @@ export default function App(){
             {selWeek.clients.map(function(r,i){
               var pct=r.totalSesiones>0?Math.round((r.usadas/r.totalSesiones)*100):0;
               var tieneRecuperar=r.sinCanjear>0||r.caducadas>0;
+              // Check manual tick (key = nombre + week)
+              var tickKey=r.nombre.toLowerCase().trim()+"_"+selWeek.key;
+              var isManualTick=renTicks[tickKey]===true;
+              var showTick=r.renovado||isManualTick;
               return<div key={i} style={{padding:"14px 18px",borderBottom:"1px solid "+T.border,display:"flex",alignItems:"center",gap:14}}>
-                {/* Tick only if next bono exists and is paid */}
-                <div style={{width:36,height:36,borderRadius:9,border:r.renovado?"2px solid #22c55e":"2px solid "+T.border2,background:r.renovado?"#22c55e15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:r.renovado?"#22c55e":T.text3,flexShrink:0}}>{r.renovado?"✓":""}</div>
+                {/* Tick: clickable to toggle manually */}
+                <button onClick={function(){
+                  var newTicks=Object.assign({},renTicks);
+                  if(isManualTick){delete newTicks[tickKey];}
+                  else{newTicks[tickKey]=true;}
+                  setRenTicks(newTicks);
+                  dbSave("bonos_timp","renovacion_ticks",newTicks).catch(function(){});
+                }} style={{width:36,height:36,borderRadius:9,border:showTick?"2px solid #22c55e":"2px solid "+T.border2,background:showTick?"#22c55e15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:showTick?"#22c55e":T.text3,flexShrink:0,cursor:"pointer",padding:0}}>{showTick?"✓":""}</button>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:14,fontWeight:700,color:T.text}}>{r.nombre}</span>
                     {tieneRecuperar&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#f59e0b15",color:"#f59e0b",fontWeight:700}}>⚠️ Sesiones pendientes</span>}
-                    {!r.renovado&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Pendiente cobro</span>}
+                    {!showTick&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Pendiente cobro</span>}
                     {r.pendientePago>0&&<span style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>💰 Debe {r.pendientePago}€</span>}
                   </div>
                   <div style={{fontSize:11,color:T.text3,marginTop:3}}>{r.tipo} · Inicio: {r.fechaValor.toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})}</div>
