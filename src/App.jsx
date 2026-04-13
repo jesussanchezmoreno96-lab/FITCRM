@@ -183,6 +183,97 @@ export default function App(){
     }).catch(function(){setTimpSyncing(false);});
   }
 
+  // Auto-fetch bonos from TIMP API (autopurchases)
+  // Solo queda el bono ACTIVO de cada cliente: el que cubre hoy o el más próximo
+  function syncBonos(){
+    var now=new Date();
+    timpFetch("autopurchases?date_from=2025-01-01&date_to=2027-01-01&page=1").then(function(data){
+      if(!data||!data.collection)return;
+      var autos=data.collection;
+      var subs=timpData||[];
+
+      // Parsear y filtrar
+      var allParsed=[];
+      autos.forEach(function(a){
+        if(a.removed)return;
+        var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
+        var nombre=sub?sub.full_name:"Desconocido";
+        if(nombre==="Desconocido")return;
+        var fechaValor=null;var fechaFin=null;
+        if(a.available_at){
+          var parts=a.available_at.split("..");
+          if(parts.length===2){fechaValor=new Date(parts[0].trim());fechaFin=new Date(parts[1].trim());}
+        }
+        if(!fechaValor||isNaN(fechaValor)||!fechaFin||isNaN(fechaFin))return;
+        var pagado=!!a.paid_at;
+        allParsed.push({
+          nombre:nombre,concepto:a.caption||"",tipoBono:a.caption||"",
+          fechaValor:fechaValor.toISOString(),fechaFin:fechaFin.toISOString(),
+          nextValidFrom:a.next_valid_from||"",
+          precio:parseFloat(a.final_price)||0,pagado:pagado,
+          fechaPago:a.paid_at||"",formaPago:a.payment_method||"",
+          suscriptionUuid:a.suscription_uuid||"",serialNumber:a.serial_number||"",
+          totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
+          total:parseFloat(a.final_price)||0,
+          pendientePago:pagado?0:parseFloat(a.final_price)||0,
+          _fv:fechaValor,_ff:fechaFin
+        });
+      });
+
+      // Agrupar por suscription_uuid (= cliente en TIMP)
+      var byUuid={};
+      allParsed.forEach(function(b){
+        var key=b.suscriptionUuid||b.nombre.toLowerCase().trim();
+        if(!byUuid[key])byUuid[key]=[];
+        byUuid[key].push(b);
+      });
+
+      var parsed=[];
+      var today=new Date(now);today.setHours(0,0,0,0);
+
+      Object.keys(byUuid).forEach(function(key){
+        var bonos=byUuid[key];
+        // Ordenar por fechaFin descendente (el que acaba más tarde primero)
+        bonos.sort(function(a,b){return b._ff-a._ff;});
+
+        // PRIORIDAD 1: Bono que cubre HOY (fechaValor <= hoy <= fechaFin)
+        var activo=bonos.find(function(b){
+          return b._fv<=today&&b._ff>=today;
+        });
+
+        // PRIORIDAD 2: Bono más próximo en el futuro (fechaValor > hoy)
+        if(!activo){
+          var futuros=bonos.filter(function(b){return b._fv>today;});
+          if(futuros.length>0){
+            futuros.sort(function(a,b){return a._fv-b._fv;});
+            activo=futuros[0];
+          }
+        }
+
+        // PRIORIDAD 3: El bono más reciente que acabó hace menos de 4 semanas
+        if(!activo){
+          var cutoff=new Date(today);cutoff.setDate(cutoff.getDate()-28);
+          activo=bonos.find(function(b){return b._ff>=cutoff;});
+        }
+
+        // Si todos los bonos son muy viejos, NO incluir al cliente
+        if(!activo)return;
+
+        var clean=Object.assign({},activo);
+        delete clean._fv;delete clean._ff;
+        parsed.push(clean);
+      });
+
+      setBonos(parsed);
+      dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // Auto-sync bonos when TIMP data is loaded
+  useEffect(function(){
+    if(timpData&&timpData.length>0){syncBonos();}
+  },[timpData]);
+
   // Import cuotas from TIMP Excel
   function importCuotas(e){
     var file=e.target.files[0];
