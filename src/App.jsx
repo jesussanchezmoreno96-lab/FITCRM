@@ -622,22 +622,22 @@ export default function App(){
         var diff=dy===0?1:dy===1?0:8-dy;
         renewMonday.setDate(renewMonday.getDate()+diff);
         // Tick = has a NEXT bono with fecha valor after current bono ends AND that bono is paid
-        var siguienteBono=sorted.length>1?null:null;
-        // Look for a bono that starts after or on fechaFin
         var nextBono=c.bonos.find(function(b){
           if(!b.fechaValor)return false;
           var bfv=new Date(b.fechaValor);
           return bfv>=fechaFin&&b!==latest;
         });
-        // Also check: if latest bono itself has pendientePago > 0, it's not paid
         var bonoActualPagado=!latest.pendientePago||latest.pendientePago===0;
         var renovado=!!nextBono&&(!nextBono.pendientePago||nextBono.pendientePago===0);
         var pendientePagoActual=latest.pendientePago||0;
         var pendientePagoNext=nextBono?nextBono.pendientePago||0:0;
+        // Si tiene sesiones "en uso", el bono sigue activo → no le toca renovar aún
+        var enUsoVal=latest.enUso||0;
+        if(enUsoVal>0)return;
         renovaciones.push({
           nombre:c.nombre,tipo:tipo,fechaValor:fv,fechaFin:fechaFin,renewMonday:renewMonday,
           totalSesiones:latest.totalSesiones,usadas:latest.usadas,
-          sinCanjear:latest.sinCanjear||0,enUso:latest.enUso||0,caducadas:latest.caducadas||0,
+          sinCanjear:latest.sinCanjear||0,enUso:0,caducadas:latest.caducadas||0,
           renovado:renovado,bonoActualPagado:bonoActualPagado,
           pendientePago:pendientePagoActual+pendientePagoNext
         });
