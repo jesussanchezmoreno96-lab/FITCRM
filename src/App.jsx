@@ -236,7 +236,16 @@ export default function App(){
     if(ld){syncBonos();}
   },[ld]);
 
-  // Import cuotas from TIMP Excel
+  // Import cuotas from TIMP Excel — se guarda aparte para sesiones consumidas
+  var cuotasExcel_=_([]),cuotasExcel=cuotasExcel_[0],setCuotasExcel=cuotasExcel_[1];
+
+  // Load cuotas excel from Supabase on init
+  useEffect(function(){
+    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){
+      if(x.id==="cuotas_excel")setCuotasExcel(x.data);
+    });}}).catch(function(){});
+  },[]);
+
   function importCuotas(e){
     var file=e.target.files[0];
     if(!file)return;
@@ -248,11 +257,9 @@ export default function App(){
         var wb=XLSX.read(ev.target.result,{type:"array",cellDates:true});
         var ws=wb.Sheets[wb.SheetNames[0]];
         var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-        // Find header row
         var hIdx=rows.findIndex(function(r){return r[0]==="Número de factura"||r[0]==="ID"||r[3]==="Cliente (nombre)";});
         if(hIdx<0)hIdx=rows.findIndex(function(r){return r&&r.some&&r.some(function(c){return c==="Cliente (nombre)";});});
         if(hIdx<0){alert("No se encontró la cabecera del archivo");return;}
-        var headers=rows[hIdx];
         var parsed=[];
         for(var i=hIdx+1;i<rows.length;i++){
           var r=rows[i];
@@ -262,28 +269,18 @@ export default function App(){
           if(!nombre)continue;
           parsed.push({
             nombre:nombre,
-            nif:r[6]||"",
-            telefono:r[5]||"",
-            concepto:r[10]||"",
-            elemento:r[11]||"",
-            totalSesiones:r[12]||0,
-            usadas:r[13]||0,
-            sinCanjear:r[14]||0,
-            enUso:r[15]||0,
-            caducadas:r[16]||0,
+            totalSesiones:+r[12]||0,
+            usadas:+r[13]||0,
+            sinCanjear:+r[14]||0,
+            enUso:+r[15]||0,
+            caducadas:+r[16]||0,
             tipoBono:r[17]||"",
-            formaPago:r[18]||"",
-            fechaVenta:r[20]||"",
-            fechaValor:r[21]||"",
-            total:r[29]||0,
-            pagado:r[30]||0,
-            pendientePago:r[31]||0,
-            profesional:r[24]||""
+            fechaValor:r[21]||""
           });
         }
-        setBonos(parsed);
-        dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
-        alert("✅ "+parsed.length+" registros de cuotas importados y guardados");
+        setCuotasExcel(parsed);
+        dbSave("bonos_timp","cuotas_excel",parsed).catch(function(){});
+        alert("✅ "+parsed.length+" registros de cuotas importados — sesiones actualizadas");
       }catch(err){alert("Error: "+err.message);}
     };
     reader.readAsArrayBuffer(file);
@@ -635,6 +632,7 @@ export default function App(){
     dk={dk}
     bonos={bonos}
     clients={cl}
+    cuotasExcel={cuotasExcel}
     renData={renData}
     setRenData={setRenData}
     onSaveRenData={function(newData){

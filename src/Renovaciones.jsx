@@ -43,6 +43,7 @@ export default function Renovaciones(props) {
   var dk = props.dk;
   var bonos = props.bonos || [];
   var clients = props.clients || [];
+  var cuotasExcel = props.cuotasExcel || [];
   var renData = props.renData || {};
   var setRenData = props.setRenData;
   var onSaveRenData = props.onSaveRenData;
@@ -139,6 +140,47 @@ export default function Renovaciones(props) {
       }
     }
   });
+
+  // ── Check cuotasExcel for clients who exhausted their bono early ──
+  // If usadas + caducadas >= totalSesiones → bono agotado → mover a renovaciones de esta semana
+  if (cuotasExcel.length > 0) {
+    var thisKey = thisMonday.toISOString().split("T")[0];
+    cuotasExcel.forEach(function (cx) {
+      if (!cx.nombre || !cx.totalSesiones) return;
+      var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0);
+      if (consumidas < +cx.totalSesiones) return; // aún tiene sesiones
+
+      // Check if this client already has an entry this week or earlier
+      var nameNorm = cx.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      var alreadyThisWeek = entries.some(function (e) {
+        var en = e.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return (en === nameNorm || en.indexOf(nameNorm) >= 0 || nameNorm.indexOf(en) >= 0) &&
+          e.renewMonday.getTime() === thisMonday.getTime();
+      });
+      if (alreadyThisWeek) return;
+
+      // Find matching CRM client
+      var crmClient = clients.find(function (cl) {
+        var cn = (cl.name || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return cn === nameNorm || cn.indexOf(nameNorm) >= 0 || nameNorm.indexOf(cn) >= 0;
+      });
+
+      entries.push({
+        nombre: cx.nombre,
+        tipo: cx.tipoBono || "",
+        precio: 0,
+        pagado: false, fechaPago: "",
+        renewMonday: thisMonday,
+        fechaValor: thisMonday,
+        fechaFin: null,
+        source: "agotado",
+        nextBooking: crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null,
+        clientId: crmClient ? crmClient.id : null,
+        clientStatus: crmClient ? crmClient.status : null,
+        sesiones: { total: +cx.totalSesiones, usadas: +cx.usadas || 0, caducadas: +cx.caducadas || 0, sinCanjear: +cx.sinCanjear || 0, enUso: +cx.enUso || 0 }
+      });
+    });
+  }
 
   // Build week map
   var weekMap = {};
@@ -328,6 +370,7 @@ export default function Renovaciones(props) {
               <span style={{ fontSize: 18, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : r.precio + "€"}</span>
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
+              {r.source === "agotado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Bono agotado ({r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total})</span>}
             </div>
 
             {/* STATUS — big select */}
