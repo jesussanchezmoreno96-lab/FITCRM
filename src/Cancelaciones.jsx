@@ -73,6 +73,18 @@ export default function Cancelaciones(props) {
   var todayCancels = [];
   var queueAlerts = []; // Slots where someone canceled and there's someone in queue
 
+  // ══ FIRST PASS: build map of valid sessions per client per day ══
+  var validSessionsByDay = {}; // key: "clientName__date" → true if has valid session that day
+  admissions.forEach(function (a) {
+    var dateStr = a.starting_at ? a.starting_at.substring(0, 10) : "";
+    (a.bookings || []).forEach(function (b) {
+      if (b.status === "valid") {
+        validSessionsByDay[b.full_name + "__" + dateStr] = true;
+      }
+    });
+  });
+
+  // ══ SECOND PASS: process cancellations and queue alerts ══
   admissions.forEach(function (a) {
     var dateStr = a.starting_at ? a.starting_at.substring(0, 10) : "";
     var timeStr = a.starting_at ? a.starting_at.substring(11, 16) : "";
@@ -90,9 +102,12 @@ export default function Cancelaciones(props) {
       else if (b.status === "at_queue") queueBookings.push(b);
     });
 
-    // Track cancellations per client
+    // Track cancellations per client — only if client has NO other valid session that day
     canceledBookings.forEach(function (b) {
       var name = b.full_name;
+      var hasOtherSession = validSessionsByDay[name + "__" + dateStr];
+      if (hasOtherSession) return; // Canceled but has another session same day → skip
+
       if (!clientMap[name]) clientMap[name] = { nombre: name, cancelaciones: 0, detalles: [] };
       clientMap[name].cancelaciones++;
       clientMap[name].detalles.push({
@@ -111,14 +126,17 @@ export default function Cancelaciones(props) {
       }
     });
 
-    // Queue alerts: someone canceled AND there are people in queue AND there's actually a free spot
-    // After cancellation, if valid bookings < capacity → there IS a free spot → alert!
-    if (canceledBookings.length > 0 && queueBookings.length > 0 && validBookings.length < capacity) {
+    // Queue alerts: someone canceled AND there are people in queue AND there's a free spot
+    // Only alert if the canceled client doesn't have another session that day
+    var realCancels = canceledBookings.filter(function (b) {
+      return !validSessionsByDay[b.full_name + "__" + dateStr];
+    });
+    if (realCancels.length > 0 && queueBookings.length > 0 && validBookings.length < capacity) {
       queueAlerts.push({
         fecha: dateStr,
         hora: timeStr,
         dia: dayName,
-        cancelados: canceledBookings.map(function (b) { return b.full_name; }),
+        cancelados: realCancels.map(function (b) { return b.full_name; }),
         enCola: queueBookings.map(function (b) { return b.full_name; }),
         capacidad: capacity,
         activos: validBookings.length,
