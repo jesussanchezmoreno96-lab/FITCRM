@@ -201,6 +201,8 @@ export default function App(){
         if(a.removed)return;
         var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
         if(!sub||!sub.full_name)return;
+        // Skip clients without active membership
+        if(!sub.active_membership)return;
         var fechaValor=null;var fechaFin=null;
         if(a.available_at){
           var parts=a.available_at.split("..");
