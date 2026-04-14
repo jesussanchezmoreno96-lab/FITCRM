@@ -164,6 +164,9 @@ export default function App(){
           var tieneBonoFuturo=bonos.some(function(b){
             return b.suscriptionUuid===s.uuid&&b.fechaValor&&new Date(b.fechaValor)>now;
           });
+          // Must have had at least one autopurchase (not just a profile in TIMP)
+          var haComprado=bonos.some(function(b){return b.suscriptionUuid===s.uuid;});
+          if(!haComprado)return false;
           if(!tieneBono&&!tieneBonoFuturo)return false;
           var sn=s.full_name.toLowerCase().trim();
           return!crmNames.some(function(cn){return cn===sn||cn.indexOf(sn)>=0||sn.indexOf(cn)>=0;});
