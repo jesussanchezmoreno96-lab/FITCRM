@@ -150,7 +150,75 @@ export default function Pagos(props) {
   var metodoInfo = function (m) { return METODOS[m] || METODOS["desconocido"]; };
 
   return (<div>
-    {/* Header */}
+    {/* ═══ IN-APP MIGRATION TRACKER (FIRST) ═══ */}
+    {allClients.length > 0 && <div style={{ marginBottom: 30 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>📱 Migración a In-App</h2>
+        <div style={{ fontSize: 13, color: T.text3 }}>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>{inappCount}</span> / {allClients.length} clientes
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{
+        background: T.bg2, borderRadius: 14, border: "1px solid " + T.border,
+        padding: "16px 20px", marginBottom: 16
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 In-App: {inappCount}</span>
+          <span style={{ color: "#f59e0b", fontWeight: 700 }}>⚠️ Otros: {allClients.length - inappCount}</span>
+        </div>
+        <div style={{ background: T.border, borderRadius: 8, height: 12, overflow: "hidden" }}>
+          <div style={{ width: (allClients.length > 0 ? Math.round((inappCount / allClients.length) * 100) : 0) + "%", height: "100%", background: "linear-gradient(90deg, #22c55e, #16a34a)", borderRadius: 8, transition: "width .3s" }}></div>
+        </div>
+        <div style={{ textAlign: "center", marginTop: 6, fontSize: 20, fontWeight: 900, color: "#22c55e" }}>
+          {allClients.length > 0 ? Math.round((inappCount / allClients.length) * 100) : 0}%
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 12 }}>
+        <input value={buscarMig} onChange={function (e) { setBuscarMig(e.target.value); }}
+          placeholder="🔍 Buscar cliente..."
+          style={{
+            width: "100%", maxWidth: 400, padding: "10px 14px",
+            background: T.bg3, border: "1px solid " + T.border2, borderRadius: 10,
+            color: T.text, fontSize: 13, outline: "none", boxSizing: "border-box"
+          }} />
+      </div>
+
+      {/* Client list */}
+      <div style={{ background: T.bg2, borderRadius: 14, border: "1px solid " + T.border, overflow: "hidden" }}>
+        {filteredMig.map(function (c, i) {
+          var isInapp = c.metodo === "inapp";
+          return <div key={i} style={{
+            padding: "12px 20px", borderBottom: "1px solid " + T.border,
+            display: "flex", alignItems: "center", gap: 12,
+            background: isInapp ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
+          }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: isInapp ? "#22c55e15" : "#f59e0b15",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, color: isInapp ? "#22c55e" : "#f59e0b"
+            }}>{isInapp ? "✓" : "⚠️"}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.nombre}</span>
+              <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>{c.bono}</span>
+            </div>
+            <div style={{
+              padding: "6px 12px", borderRadius: 8,
+              background: isInapp ? "#22c55e12" : "#f59e0b12",
+              border: "1px solid " + (isInapp ? "#22c55e30" : "#f59e0b30"),
+              fontSize: 12, fontWeight: 700,
+              color: isInapp ? "#22c55e" : "#f59e0b"
+            }}>{isInapp ? "📱 In-App" : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {/* ═══ PAGOS PENDIENTES ═══ */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
       <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>💰 Pagos Pendientes</h2>
       <div style={{ fontSize: 14, color: T.text3 }}>{pendientes.length} clientes</div>
@@ -268,74 +336,6 @@ export default function Pagos(props) {
               padding: "4px 10px", borderRadius: 8,
               background: info.color + "10", fontSize: 11, fontWeight: 600, color: info.color
             }}>{info.icon} {info.label}</div>
-          </div>;
-        })}
-      </div>
-    </div>}
-
-    {/* ═══ IN-APP MIGRATION TRACKER ═══ */}
-    {allClients.length > 0 && <div style={{ marginTop: 30 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: T.text, margin: 0 }}>📱 Migración a In-App</h3>
-        <div style={{ fontSize: 13, color: T.text3 }}>
-          <span style={{ color: "#22c55e", fontWeight: 700 }}>{inappCount}</span> / {allClients.length} clientes
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{
-        background: T.bg2, borderRadius: 14, border: "1px solid " + T.border,
-        padding: "16px 20px", marginBottom: 16
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-          <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 In-App: {inappCount}</span>
-          <span style={{ color: "#f59e0b", fontWeight: 700 }}>⚠️ Otros: {allClients.length - inappCount}</span>
-        </div>
-        <div style={{ background: T.border, borderRadius: 8, height: 12, overflow: "hidden" }}>
-          <div style={{ width: (allClients.length > 0 ? Math.round((inappCount / allClients.length) * 100) : 0) + "%", height: "100%", background: "linear-gradient(90deg, #22c55e, #16a34a)", borderRadius: 8, transition: "width .3s" }}></div>
-        </div>
-        <div style={{ textAlign: "center", marginTop: 6, fontSize: 20, fontWeight: 900, color: "#22c55e" }}>
-          {allClients.length > 0 ? Math.round((inappCount / allClients.length) * 100) : 0}%
-        </div>
-      </div>
-
-      {/* Search */}
-      <div style={{ marginBottom: 12 }}>
-        <input value={buscarMig} onChange={function (e) { setBuscarMig(e.target.value); }}
-          placeholder="🔍 Buscar cliente..."
-          style={{
-            width: "100%", maxWidth: 400, padding: "10px 14px",
-            background: T.bg3, border: "1px solid " + T.border2, borderRadius: 10,
-            color: T.text, fontSize: 13, outline: "none", boxSizing: "border-box"
-          }} />
-      </div>
-
-      {/* Client list */}
-      <div style={{ background: T.bg2, borderRadius: 14, border: "1px solid " + T.border, overflow: "hidden" }}>
-        {filteredMig.map(function (c, i) {
-          var isInapp = c.metodo === "inapp";
-          return <div key={i} style={{
-            padding: "12px 20px", borderBottom: "1px solid " + T.border,
-            display: "flex", alignItems: "center", gap: 12,
-            background: isInapp ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
-          }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: isInapp ? "#22c55e15" : "#f59e0b15",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, color: isInapp ? "#22c55e" : "#f59e0b"
-            }}>{isInapp ? "✓" : "⚠️"}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.nombre}</span>
-              <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>{c.bono}</span>
-            </div>
-            <div style={{
-              padding: "6px 12px", borderRadius: 8,
-              background: isInapp ? "#22c55e12" : "#f59e0b12",
-              border: "1px solid " + (isInapp ? "#22c55e30" : "#f59e0b30"),
-              fontSize: 12, fontWeight: 700,
-              color: isInapp ? "#22c55e" : "#f59e0b"
-            }}>{isInapp ? "📱 In-App" : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
           </div>;
         })}
       </div>
