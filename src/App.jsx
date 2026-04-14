@@ -3,6 +3,7 @@ import Horarios from "./Horarios.jsx";
 import AIAssistant from "./AIAssistant.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Renovaciones from "./Renovaciones.jsx";
+import Pagos from "./Pagos.jsx";
 
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -510,7 +511,7 @@ export default function App(){
       <button onClick={function(){setFm({});setSA(true);}} style={{padding:"8px 16px",background:dk?"linear-gradient(135deg,#394265,#4a5580)":"rgba(255,255,255,.2)",border:"none",borderRadius:9,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Cliente</button>
     </div>
   </div>
-  <div style={{display:"flex",gap:4,padding:"6px 0",overflowX:"auto"}}>{[["clientes","📊","Fichas"],["panel","👥","Clientes"],["seguimiento","📋","Seguimiento"],["leads","🎯","Leads"],["renovaciones","🔄","Renovaciones"],["horarios","📅","Horarios"]].map(function(x){var active=mv===x[0];return<button key={x[0]} onClick={function(){setMv(x[0]);}} style={{padding:"12px 16px",border:"none",borderBottom:active?"3px solid "+(dk?"#8ba3d9":"#fff"):"3px solid transparent",background:active?(dk?"rgba(99,102,241,.1)":"rgba(255,255,255,.15)"):"transparent",color:active?(dk?"#e2e8f0":"#fff"):(dk?"#64748b":"rgba(255,255,255,.5)"),fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,borderRadius:"8px 8px 0 0",whiteSpace:"nowrap"}}><span style={{fontSize:16}}>{x[1]}</span>{x[2]}{x[0]==="seguimiento"&&pc>0?<span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:"#ef4444",color:"#fff",fontWeight:800}}>{pc}</span>:null}</button>;})}</div>
+  <div style={{display:"flex",gap:4,padding:"6px 0",overflowX:"auto"}}>{[["clientes","📊","Fichas"],["panel","👥","Clientes"],["seguimiento","📋","Seguimiento"],["leads","🎯","Leads"],["renovaciones","🔄","Renovaciones"],["pagos","💰","Pagos"],["horarios","📅","Horarios"]].map(function(x){var active=mv===x[0];return<button key={x[0]} onClick={function(){setMv(x[0]);}} style={{padding:"12px 16px",border:"none",borderBottom:active?"3px solid "+(dk?"#8ba3d9":"#fff"):"3px solid transparent",background:active?(dk?"rgba(99,102,241,.1)":"rgba(255,255,255,.15)"):"transparent",color:active?(dk?"#e2e8f0":"#fff"):(dk?"#64748b":"rgba(255,255,255,.5)"),fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,borderRadius:"8px 8px 0 0",whiteSpace:"nowrap"}}><span style={{fontSize:16}}>{x[1]}</span>{x[2]}{x[0]==="seguimiento"&&pc>0?<span style={{fontSize:9,padding:"2px 6px",borderRadius:8,background:"#ef4444",color:"#fff",fontWeight:800}}>{pc}</span>:null}</button>;})}</div>
   </div></div>
 
   <div style={{maxWidth:1100,margin:"0 auto",padding:"20px"}}>
@@ -670,6 +671,13 @@ export default function App(){
       });});
     }}
     importCuotas={importCuotas}
+  />}
+
+  {mv==="pagos"&&<Pagos
+    theme={T}
+    dk={dk}
+    bonos={bonos}
+    clients={cl}
   />}
 
   {mv==="horarios"&&<div>
