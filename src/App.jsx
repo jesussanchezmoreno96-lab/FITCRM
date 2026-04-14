@@ -208,10 +208,12 @@ export default function App(){
         }
         if(!fechaValor||isNaN(fechaValor))return;
         var pagado=!!a.paid_at;
+        // Save dates in LOCAL timezone to avoid UTC day shift
+        function toLocalISO(d){var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate(),h=d.getHours(),mi=d.getMinutes();return y+"-"+(m<10?"0":"")+m+"-"+(dd<10?"0":"")+dd+"T"+(h<10?"0":"")+h+":"+(mi<10?"0":"")+mi+":00";}
         parsed.push({
           nombre:sub.full_name,concepto:a.caption||"",tipoBono:a.caption||"",
-          fechaValor:fechaValor.toISOString(),
-          fechaFin:fechaFin?fechaFin.toISOString():"",
+          fechaValor:toLocalISO(fechaValor),
+          fechaFin:fechaFin?toLocalISO(fechaFin):"",
           precio:parseFloat(a.final_price)||0,pagado:pagado,
           fechaPago:a.paid_at||"",formaPago:a.payment_method||"",
           suscriptionUuid:a.suscription_uuid||"",
