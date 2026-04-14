@@ -126,20 +126,27 @@ export default function App(){
             upd.timpAddress=match.address;
             // Cliente con bono = active_membership OR tiene reserva futura
             var tieneBono=match.active_membership||!!match.next_booking_for;
-            // ALTA: tiene bono → CRM activo (inmediato)
-            if(tieneBono&&c.status!=="activo"){
+            // Check if client has a future autopurchase (bono con fecha de valor adelantada)
+            var tienBonoFuturo=bonos.some(function(b){
+              if(!b.suscriptionUuid||b.suscriptionUuid!==match.uuid)return false;
+              if(!b.fechaValor)return false;
+              var fv=new Date(b.fechaValor);
+              return fv>now;
+            });
+            // ALTA: tiene bono activo O bono futuro → CRM activo
+            if((tieneBono||tienBonoFuturo)&&c.status!=="activo"){
               upd.status="activo";
               upd.timpAlert="Alta automática desde TIMP";
               upd.timpAltaDate=now.toISOString();
             }
-            // BAJA: sin bono ni reserva → baja inmediata
-            else if(!tieneBono&&c.status==="activo"){
+            // BAJA: sin bono activo NI reserva NI bono futuro → baja
+            else if(!tieneBono&&!tienBonoFuturo&&c.status==="activo"){
               upd.status="baja";
               upd.timpAlert="Baja automática (sin bono activo en TIMP)";
               upd.motivoBaja="Sin bono activo en TIMP";
             }
             // Activo en ambos, todo OK
-            else if(tieneBono&&c.status==="activo"){
+            else if((tieneBono||tienBonoFuturo)&&c.status==="activo"){
               upd.timpAlert=null;
             }
             return upd;
@@ -153,7 +160,11 @@ export default function App(){
         var newFromTimp=subs.filter(function(s){
           if(!s.full_name)return false;
           var tieneBono=s.active_membership||!!s.next_booking_for;
-          if(!tieneBono)return false;
+          // Also check for future autopurchase
+          var tieneBonoFuturo=bonos.some(function(b){
+            return b.suscriptionUuid===s.uuid&&b.fechaValor&&new Date(b.fechaValor)>now;
+          });
+          if(!tieneBono&&!tieneBonoFuturo)return false;
           var sn=s.full_name.toLowerCase().trim();
           return!crmNames.some(function(cn){return cn===sn||cn.indexOf(sn)>=0||sn.indexOf(cn)>=0;});
         });
@@ -244,7 +255,10 @@ export default function App(){
           fraccionado:esFraccionado,
           mitadPagada:mitadPagada,
           esReserva:esReserva,
-          importePagado:importePagado
+          importePagado:importePagado,
+          telefono:sub.phone||"",
+          email:sub.email||"",
+          nextBooking:sub.next_booking_for||""
         });
       });
       console.log("[syncBonos] Parsed "+parsed.length+" bonos from API");
