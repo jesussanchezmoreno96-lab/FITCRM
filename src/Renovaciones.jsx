@@ -332,7 +332,13 @@ export default function Renovaciones(props) {
         Sin renovaciones esta semana
       </div>}
 
-      {selWeek.clients.map(function (r, i) {
+      {selWeek.clients.slice().sort(function (a, b) {
+        var da = rd(a.nombre, selWeek.key);
+        var db = rd(b.nombre, selWeek.key);
+        var sa = (da.renovacion === "renovado" || a.pagado) ? 0 : da.renovacion === "mitad" ? 1 : da.renovacion === "baja" ? 3 : 2;
+        var sb = (db.renovacion === "renovado" || b.pagado) ? 0 : db.renovacion === "mitad" ? 1 : db.renovacion === "baja" ? 3 : 2;
+        return sa - sb;
+      }).map(function (r, i) {
         var data = rd(r.nombre, selWeek.key);
         var isRenovado = data.renovacion === "renovado" || r.pagado;
         var isMitad = data.renovacion === "mitad";
