@@ -122,6 +122,13 @@ export default function Renovaciones(props) {
     var addedWeeks = {};
 
     sorted.forEach(function (bono) {
+      // Skip session-based bonos (bono 5, 10, 20) from renewals by fechaValor
+      // They only appear when Excel shows 1 session left or when fechaFin expires
+      var caption = (bono.tipo || "").toLowerCase();
+      var isBonoSesiones = caption.includes("bono 5") || caption.includes("bono 10") || caption.includes("bono 20") ||
+        (caption.includes("bono") && caption.includes("sesion"));
+      if (isBonoSesiones) return;
+
       var monday = bono.fechaValorMonday;
       var weekKey = localKey(monday);
       if (addedWeeks[weekKey]) return;
@@ -154,16 +161,19 @@ export default function Renovaciones(props) {
     }
   });
 
-  // ── Check cuotasExcel for clients who exhausted their bono early ──
-  // If usadas + caducadas >= totalSesiones → bono agotado → mover a renovaciones de esta semana
+  // ── Check cuotasExcel for clients who exhausted their bono or have 1 session left ──
   if (cuotasExcel.length > 0) {
     var thisKey = localKey(thisMonday);
     cuotasExcel.forEach(function (cx) {
       if (!cx.nombre || !cx.totalSesiones) return;
+      var total = +cx.totalSesiones;
       var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0) + (+cx.sinCanjear || 0);
-      if (consumidas < +cx.totalSesiones) return; // aún tiene sesiones
+      var restantes = total - consumidas;
 
-      // Check if this client already has an entry this week or earlier
+      // Skip if more than 1 session remaining
+      if (restantes > 1) return;
+
+      // Check if this client already has an entry this week
       var nameNorm = cx.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       var alreadyThisWeek = entries.some(function (e) {
         var en = e.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -178,6 +188,9 @@ export default function Renovaciones(props) {
         return cn === nameNorm || cn.indexOf(nameNorm) >= 0 || nameNorm.indexOf(cn) >= 0;
       });
 
+      var isAgotado = restantes <= 0;
+      var isUltima = restantes === 1;
+
       entries.push({
         nombre: cx.nombre,
         tipo: cx.tipoBono || "",
@@ -186,11 +199,11 @@ export default function Renovaciones(props) {
         renewMonday: thisMonday,
         fechaValor: thisMonday,
         fechaFin: null,
-        source: "agotado",
+        source: isAgotado ? "agotado" : "ultima_sesion",
         nextBooking: crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null,
         clientId: crmClient ? crmClient.id : null,
         clientStatus: crmClient ? crmClient.status : null,
-        sesiones: { total: +cx.totalSesiones, usadas: +cx.usadas || 0, caducadas: +cx.caducadas || 0, sinCanjear: +cx.sinCanjear || 0, enUso: +cx.enUso || 0 }
+        sesiones: { total: total, usadas: +cx.usadas || 0, caducadas: +cx.caducadas || 0, sinCanjear: +cx.sinCanjear || 0, enUso: +cx.enUso || 0, restantes: restantes }
       });
     });
   }
@@ -443,6 +456,7 @@ export default function Renovaciones(props) {
               {isReserva && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>🔒 Reserva</span>}
               {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
               {r.source === "agotado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Bono agotado ({r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total})</span>}
+              {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>⚠️ Última sesión ({r.sesiones.restantes} de {r.sesiones.total})</span>}
             </div>
 
             {/* STATUS — big select */}
