@@ -147,7 +147,7 @@ export default function Renovaciones(props) {
     var thisKey = thisMonday.toISOString().split("T")[0];
     cuotasExcel.forEach(function (cx) {
       if (!cx.nombre || !cx.totalSesiones) return;
-      var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0);
+      var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0) + (+cx.sinCanjear || 0);
       if (consumidas < +cx.totalSesiones) return; // aún tiene sesiones
 
       // Check if this client already has an entry this week or earlier
