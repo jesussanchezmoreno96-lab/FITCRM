@@ -25,6 +25,15 @@ function fmtDate(d) {
   catch (e) { return String(d || ""); }
 }
 
+// Generate week key using LOCAL date (avoids UTC timezone mismatch)
+function localKey(d) {
+  var dd = new Date(d);
+  var y = dd.getFullYear();
+  var m = dd.getMonth() + 1;
+  var day = dd.getDate();
+  return y + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+}
+
 function weekLabel(monday) {
   var d = monday.getDate();
   var m = MONTHS_ES[monday.getMonth()];
@@ -74,7 +83,7 @@ export default function Renovaciones(props) {
   // ══ BUILD ENTRIES ══
   var now = new Date();
   var thisMonday = getMonday(now);
-  var todayStr = now.toISOString().split("T")[0];
+  var todayStr = localKey(now);
 
   var allBonos = [];
   bonos.forEach(function (b) {
@@ -112,7 +121,7 @@ export default function Renovaciones(props) {
 
     sorted.forEach(function (bono) {
       var monday = bono.fechaValorMonday;
-      var weekKey = monday.toISOString().split("T")[0];
+      var weekKey = localKey(monday);
       if (addedWeeks[weekKey]) return;
       addedWeeks[weekKey] = true;
       entries.push({
@@ -127,7 +136,7 @@ export default function Renovaciones(props) {
     var latest = sorted[sorted.length - 1];
     if (latest && latest.fechaFin) {
       var nextMon = getNextMonday(latest.fechaFin);
-      var nextKey = nextMon.toISOString().split("T")[0];
+      var nextKey = localKey(nextMon);
       var hasNext = sorted.some(function (b) { return b.fechaValorMonday.getTime() >= nextMon.getTime(); });
       if (!hasNext && !addedWeeks[nextKey]) {
         addedWeeks[nextKey] = true;
@@ -144,7 +153,7 @@ export default function Renovaciones(props) {
   // ── Check cuotasExcel for clients who exhausted their bono early ──
   // If usadas + caducadas >= totalSesiones → bono agotado → mover a renovaciones de esta semana
   if (cuotasExcel.length > 0) {
-    var thisKey = thisMonday.toISOString().split("T")[0];
+    var thisKey = localKey(thisMonday);
     cuotasExcel.forEach(function (cx) {
       if (!cx.nombre || !cx.totalSesiones) return;
       var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0) + (+cx.sinCanjear || 0);
@@ -185,7 +194,7 @@ export default function Renovaciones(props) {
   // Build week map
   var weekMap = {};
   entries.forEach(function (e) {
-    var key = e.renewMonday.toISOString().split("T")[0];
+    var key = localKey(e.renewMonday);
     if (!weekMap[key]) weekMap[key] = { monday: e.renewMonday, key: key, clients: [] };
     weekMap[key].clients.push(e);
   });
@@ -222,7 +231,7 @@ export default function Renovaciones(props) {
   var weekList = [];
   for (var wi = -1; wi <= 8; wi++) {
     var mon = new Date(thisMonday); mon.setDate(mon.getDate() + wi * 7);
-    var key = mon.toISOString().split("T")[0];
+    var key = localKey(mon);
     weekList.push(weekMap[key] || { monday: mon, key: key, clients: [] });
   }
 
@@ -255,7 +264,7 @@ export default function Renovaciones(props) {
       if (r.nextBooking) {
         try {
           var bd = new Date(r.nextBooking);
-          if (bd.toISOString().split("T")[0] === todayStr) {
+          if (localKey(bd) === todayStr) {
             todayNotifs.push({ nombre: r.nombre, hora: bd.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }), tipo: r.tipo, precio: r.precio });
           }
         } catch (e) { }
@@ -390,7 +399,7 @@ export default function Renovaciones(props) {
                 if (val === "mitad") {
                   var sixWeeks = new Date(selWeek.monday);
                   sixWeeks.setDate(sixWeeks.getDate() + 42);
-                  var spKey = sixWeeks.toISOString().split("T")[0];
+                  var spKey = localKey(sixWeeks);
                   var spRk = r.nombre.toLowerCase().trim() + "__" + spKey;
                   // Only create if not already there
                   var existing = renData[spRk];
