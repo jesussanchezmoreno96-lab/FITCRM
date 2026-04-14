@@ -96,7 +96,7 @@ export default function Renovaciones(props) {
       precio: b.precio || b.total || 0, pagado: !!b.pagado,
       fechaPago: b.fechaPago || "", suscriptionUuid: b.suscriptionUuid || "",
       fraccionado: !!b.fraccionado, mitadPagada: !!b.mitadPagada,
-      importePagado: b.importePagado || 0
+      esReserva: !!b.esReserva, importePagado: b.importePagado || 0
     });
   });
 
@@ -132,7 +132,8 @@ export default function Renovaciones(props) {
         renewMonday: monday, fechaValor: bono.fechaValor, fechaFin: bono.fechaFin,
         source: "bono", nextBooking: nextBooking,
         clientId: crmClient ? crmClient.id : null, clientStatus: crmClient ? crmClient.status : null,
-        fraccionado: bono.fraccionado, mitadPagada: bono.mitadPagada, importePagado: bono.importePagado
+        fraccionado: bono.fraccionado, mitadPagada: bono.mitadPagada,
+        esReserva: bono.esReserva, importePagado: bono.importePagado
       });
     });
 
@@ -245,6 +246,29 @@ export default function Renovaciones(props) {
       renewMonday: sixWeeks, fechaValor: sixWeeks, fechaFin: null,
       source: "segundo_pago", nextBooking: e.nextBooking,
       clientId: e.clientId, clientStatus: e.clientStatus
+    });
+  });
+
+  // Auto-create "pago restante" entries for API-detected reservas (at next booking week)
+  entries.forEach(function (e) {
+    if (!e.esReserva || e.pagado || !e.nextBooking) return;
+    var bookDate = new Date(e.nextBooking);
+    if (isNaN(bookDate)) return;
+    var bookMonday = getMonday(bookDate);
+    var brKey = localKey(bookMonday);
+    if (weekMap[brKey]) {
+      var already = weekMap[brKey].clients.some(function (c) { return c.nombre.toLowerCase().trim() === e.nombre.toLowerCase().trim(); });
+      if (already) return;
+    }
+    var restante = Math.round(e.precio - (e.importePagado || e.precio * 0.25));
+    if (!weekMap[brKey]) weekMap[brKey] = { monday: bookMonday, key: brKey, clients: [] };
+    weekMap[brKey].clients.push({
+      nombre: e.nombre, tipo: e.tipo, precio: e.precio,
+      pagado: false, fechaPago: "",
+      renewMonday: bookMonday, fechaValor: bookMonday, fechaFin: null,
+      source: "pago_restante", nextBooking: e.nextBooking,
+      clientId: e.clientId, clientStatus: e.clientStatus,
+      importePagado: e.importePagado, restante: restante
     });
   });
 
@@ -367,17 +391,21 @@ export default function Renovaciones(props) {
         var db = rd(b.nombre, selWeek.key);
         var aMitad = da.renovacion === "mitad" || (a.mitadPagada && !a.pagado && da.renovacion !== "baja");
         var bMitad = db.renovacion === "mitad" || (b.mitadPagada && !b.pagado && db.renovacion !== "baja");
-        var sa = (da.renovacion === "renovado" || a.pagado) ? 0 : aMitad ? 1 : da.renovacion === "baja" ? 3 : 2;
-        var sb = (db.renovacion === "renovado" || b.pagado) ? 0 : bMitad ? 1 : db.renovacion === "baja" ? 3 : 2;
+        var aReserva = da.renovacion === "reserva" || (a.esReserva && !a.pagado && da.renovacion !== "baja");
+        var bReserva = db.renovacion === "reserva" || (b.esReserva && !b.pagado && db.renovacion !== "baja");
+        var sa = (da.renovacion === "renovado" || a.pagado) ? 0 : aReserva ? 0.5 : aMitad ? 1 : da.renovacion === "baja" ? 3 : 2;
+        var sb = (db.renovacion === "renovado" || b.pagado) ? 0 : bReserva ? 0.5 : bMitad ? 1 : db.renovacion === "baja" ? 3 : 2;
         return sa - sb;
       }).map(function (r, i) {
         var data = rd(r.nombre, selWeek.key);
-        // Auto-detect mitad pagada from TIMP API
+        // Auto-detect mitad pagada or reserva from TIMP API
         var autoMitad = r.mitadPagada && !r.pagado;
+        var autoReserva = r.esReserva && !r.pagado;
         var isRenovado = data.renovacion === "renovado" || r.pagado;
-        var isMitad = data.renovacion === "mitad" || (autoMitad && !isRenovado && data.renovacion !== "baja");
+        var isReserva = data.renovacion === "reserva" || (autoReserva && !isRenovado && data.renovacion !== "baja");
+        var isMitad = data.renovacion === "mitad" || (autoMitad && !isRenovado && !isReserva && data.renovacion !== "baja");
         var isBaja = data.renovacion === "baja";
-        var isPending = !isRenovado && !isBaja && !isMitad;
+        var isPending = !isRenovado && !isBaja && !isMitad && !isReserva;
         var noteKey = rk(r.nombre, selWeek.key);
         var isEditingNote = editNote === noteKey;
 
@@ -385,9 +413,10 @@ export default function Renovaciones(props) {
         if (isBaja) rowBg = dk ? "rgba(239,68,68,.04)" : "#fef2f2";
         if (isRenovado) rowBg = dk ? "rgba(34,197,94,.04)" : "#f0fdf4";
         if (isMitad) rowBg = dk ? "rgba(99,102,241,.04)" : "#f0f0ff";
+        if (isReserva) rowBg = dk ? "rgba(6,182,212,.04)" : "#f0fdfa";
 
         // Status color
-        var stColor = isRenovado ? "#22c55e" : isMitad ? "#6366f1" : isBaja ? "#ef4444" : "#f59e0b";
+        var stColor = isRenovado ? "#22c55e" : isReserva ? "#06b6d4" : isMitad ? "#6366f1" : isBaja ? "#ef4444" : "#f59e0b";
         var stBg = stColor + "12";
         var stBorder = stColor + "35";
 
@@ -407,16 +436,18 @@ export default function Renovaciones(props) {
                 fontSize: 15, fontWeight: 700, color: T.text,
                 textDecoration: isBaja ? "line-through" : "none"
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 18, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.precio / 2) + "€ pagado" : r.precio + "€"}</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.precio / 2) + "€ pagado" : isReserva ? r.importePagado + "€ reserva" : r.precio + "€"}</span>
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
               {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Pago fraccionado</span>}
+              {isReserva && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>🔒 Reserva</span>}
+              {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
               {r.source === "agotado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Bono agotado ({r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total})</span>}
             </div>
 
             {/* STATUS — big select */}
             <select
-              value={r.pagado ? "renovado" : isMitad ? "mitad" : (data.renovacion || "pendiente")}
+              value={r.pagado ? "renovado" : isReserva ? "reserva" : isMitad ? "mitad" : (data.renovacion || "pendiente")}
               onChange={function (e) {
                 var val = e.target.value;
                 upd(r.nombre, selWeek.key, "renovacion", val);
@@ -427,13 +458,28 @@ export default function Renovaciones(props) {
                   sixWeeks.setDate(sixWeeks.getDate() + 42);
                   var spKey = localKey(sixWeeks);
                   var spRk = r.nombre.toLowerCase().trim() + "__" + spKey;
-                  // Only create if not already there
                   var existing = renData[spRk];
                   if (!existing || !existing.notas) {
                     var newData = Object.assign({}, renData);
-                    newData[spRk] = { notas: "2º pago trimestral (mitad restante: " + Math.round(r.precio / 2) + "€)", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
+                    newData[spRk] = { notas: "2º pago trimestral — faltan " + Math.round(r.precio / 2) + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
                     if (setRenData) setRenData(newData);
                     if (onSaveRenData) onSaveRenData(newData);
+                  }
+                }
+
+                // If "reserva" → create entry at next booking week for remaining payment
+                if (val === "reserva" && r.nextBooking) {
+                  var bookDate = new Date(r.nextBooking);
+                  var bookMonday = getMonday(bookDate);
+                  var brKey = localKey(bookMonday);
+                  var brRk = r.nombre.toLowerCase().trim() + "__" + brKey;
+                  var existingR = renData[brRk];
+                  if (!existingR || !existingR.notas) {
+                    var restante = Math.round(r.precio - (r.importePagado || r.precio * 0.25));
+                    var nd = Object.assign({}, renData);
+                    nd[brRk] = { notas: "Pago restante reserva — faltan " + restante + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
+                    if (setRenData) setRenData(nd);
+                    if (onSaveRenData) onSaveRenData(nd);
                   }
                 }
 
@@ -453,6 +499,7 @@ export default function Renovaciones(props) {
               }}
             >
               <option value="pendiente">⏳ Pendiente</option>
+              <option value="reserva">🔒 Reserva</option>
               <option value="mitad">💰 Mitad pagada</option>
               <option value="renovado">✅ Renovado</option>
               <option value="baja">🚫 No renueva</option>

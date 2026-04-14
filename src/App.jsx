@@ -208,13 +208,22 @@ export default function App(){
         }
         if(!fechaValor||isNaN(fechaValor))return;
         var pagado=!!a.paid_at;
-        // Pago fraccionado detection
+        // Pago fraccionado / reserva detection
         var esFraccionado=!!a.purchase_installment;
         var mitadPagada=false;
+        var esReserva=false;
         var importePagado=0;
+        var precioTotal=parseFloat(a.final_price)||0;
         if(esFraccionado&&a.installments&&a.installments.length>0){
           a.installments.forEach(function(inst){if(inst.paid)importePagado+=parseFloat(inst.paid_amount)||0;});
-          if(importePagado>0&&!pagado)mitadPagada=true;
+          if(importePagado>0&&!pagado){
+            // <= 30% del total → reserva; > 30% → mitad pagada
+            if(importePagado<=precioTotal*0.3){
+              esReserva=true;
+            }else{
+              mitadPagada=true;
+            }
+          }
         }
         // Save dates in LOCAL timezone to avoid UTC day shift
         function toLocalISO(d){var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate(),h=d.getHours(),mi=d.getMinutes();return y+"-"+(m<10?"0":"")+m+"-"+(dd<10?"0":"")+dd+"T"+(h<10?"0":"")+h+":"+(mi<10?"0":"")+mi+":00";}
@@ -230,6 +239,7 @@ export default function App(){
           pendientePago:pagado?0:parseFloat(a.final_price)||0,
           fraccionado:esFraccionado,
           mitadPagada:mitadPagada,
+          esReserva:esReserva,
           importePagado:importePagado
         });
       });
