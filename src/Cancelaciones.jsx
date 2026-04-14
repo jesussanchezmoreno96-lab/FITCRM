@@ -111,8 +111,9 @@ export default function Cancelaciones(props) {
       }
     });
 
-    // Queue alerts: someone canceled AND there are people in queue
-    if (canceledBookings.length > 0 && queueBookings.length > 0) {
+    // Queue alerts: someone canceled AND there are people in queue AND there's actually a free spot
+    // After cancellation, if valid bookings < capacity → there IS a free spot → alert!
+    if (canceledBookings.length > 0 && queueBookings.length > 0 && validBookings.length < capacity) {
       queueAlerts.push({
         fecha: dateStr,
         hora: timeStr,
@@ -120,14 +121,9 @@ export default function Cancelaciones(props) {
         cancelados: canceledBookings.map(function (b) { return b.full_name; }),
         enCola: queueBookings.map(function (b) { return b.full_name; }),
         capacidad: capacity,
-        activos: validBookings.length
+        activos: validBookings.length,
+        huecos: capacity - validBookings.length
       });
-    }
-
-    // Also alert if someone canceled and hour was full (valid >= capacity)
-    if (canceledBookings.length > 0 && queueBookings.length === 0 && validBookings.length >= capacity && capacity > 0) {
-      // Hour was full, now has a free spot but no one in queue
-      // Still useful to know
     }
   });
 
@@ -180,7 +176,7 @@ export default function Cancelaciones(props) {
           <div style={{ fontSize: 13, color: T.text, display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 En cola:</span>
             <span style={{ fontWeight: 700 }}>{q.enCola.join(", ")}</span>
-            <span style={{ fontSize: 11, color: T.text3 }}>— ¡Avisar por WhatsApp!</span>
+            <span style={{ fontSize: 11, color: T.text3 }}>— {q.huecos} hueco{q.huecos > 1 ? "s" : ""} libre{q.huecos > 1 ? "s" : ""} — ¡Avisar por WhatsApp!</span>
           </div>
         </div>;
       })}
