@@ -208,6 +208,14 @@ export default function App(){
         }
         if(!fechaValor||isNaN(fechaValor))return;
         var pagado=!!a.paid_at;
+        // Pago fraccionado detection
+        var esFraccionado=!!a.purchase_installment;
+        var mitadPagada=false;
+        var importePagado=0;
+        if(esFraccionado&&a.installments&&a.installments.length>0){
+          a.installments.forEach(function(inst){if(inst.paid)importePagado+=parseFloat(inst.paid_amount)||0;});
+          if(importePagado>0&&!pagado)mitadPagada=true;
+        }
         // Save dates in LOCAL timezone to avoid UTC day shift
         function toLocalISO(d){var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate(),h=d.getHours(),mi=d.getMinutes();return y+"-"+(m<10?"0":"")+m+"-"+(dd<10?"0":"")+dd+"T"+(h<10?"0":"")+h+":"+(mi<10?"0":"")+mi+":00";}
         parsed.push({
@@ -219,7 +227,10 @@ export default function App(){
           suscriptionUuid:a.suscription_uuid||"",
           totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
           total:parseFloat(a.final_price)||0,
-          pendientePago:pagado?0:parseFloat(a.final_price)||0
+          pendientePago:pagado?0:parseFloat(a.final_price)||0,
+          fraccionado:esFraccionado,
+          mitadPagada:mitadPagada,
+          importePagado:importePagado
         });
       });
       console.log("[syncBonos] Parsed "+parsed.length+" bonos from API");
