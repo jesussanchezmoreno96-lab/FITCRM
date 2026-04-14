@@ -17,8 +17,11 @@ export default function Cancelaciones(props) {
   var admissions_ = _([]), admissions = admissions_[0], setAdmissions = admissions_[1];
   var semanas_ = _(3), semanas = semanas_[0], setSemanas = semanas_[1];
 
+  var refreshCount_ = _(0), refreshCount = refreshCount_[0], setRefreshCount = refreshCount_[1];
+  var lastRefresh_ = _(null), lastRefresh = lastRefresh_[0], setLastRefresh = lastRefresh_[1];
+
   // Fetch admissions data
-  useEffect(function () {
+  function fetchAdmissions() {
     var today = new Date();
     var from = localKey(today);
     var futureDate = new Date(today);
@@ -28,7 +31,6 @@ export default function Cancelaciones(props) {
     var url = "/api/timp?path=branch_buildings/" + timpCenter + "/admissions%3Fdate_from=" + from + "%26date_to=" + to + "%26page=1";
     fetch(url).then(function (r) { return r.json(); }).then(function (d) {
       if (d && d.collection) {
-        // Check if there are more pages
         var allAdmissions = d.collection;
         var totalPages = d.page_data ? d.page_data.total_pages : 1;
         if (totalPages > 1) {
@@ -43,15 +45,31 @@ export default function Cancelaciones(props) {
             });
             setAdmissions(allAdmissions);
             setLoading(false);
+            setLastRefresh(new Date());
           });
         } else {
           setAdmissions(allAdmissions);
           setLoading(false);
+          setLastRefresh(new Date());
         }
       } else {
         setLoading(false);
       }
     }).catch(function () { setLoading(false); });
+  }
+
+  // Initial fetch + when semanas changes
+  useEffect(function () {
+    fetchAdmissions();
+  }, [semanas]);
+
+  // Auto-refresh every 5 minutes
+  useEffect(function () {
+    var interval = setInterval(function () {
+      fetchAdmissions();
+      setRefreshCount(function (c) { return c + 1; });
+    }, 5 * 60 * 1000);
+    return function () { clearInterval(interval); };
   }, [semanas]);
 
   if (loading) {
@@ -156,16 +174,21 @@ export default function Cancelaciones(props) {
   return (<div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
       <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>🚫 Cancelaciones</h2>
-      <select value={semanas} onChange={function (e) { setSemanas(+e.target.value); setLoading(true); }}
-        style={{
-          padding: "8px 14px", fontSize: 13, fontWeight: 700,
-          background: T.bg2, border: "2px solid " + T.navy, borderRadius: 10,
-          color: T.text, outline: "none", cursor: "pointer"
-        }}>
-        <option value={2}>2 semanas</option>
-        <option value={3}>3 semanas</option>
-        <option value={4}>4 semanas</option>
-      </select>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {lastRefresh && <span style={{ fontSize: 10, color: T.text3 }}>🔄 {lastRefresh.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</span>}
+        <button onClick={function () { setLoading(true); fetchAdmissions(); }}
+          style={{ padding: "6px 12px", background: T.bg3, border: "1px solid " + T.border2, borderRadius: 8, color: T.text3, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>↻ Actualizar</button>
+        <select value={semanas} onChange={function (e) { setSemanas(+e.target.value); setLoading(true); }}
+          style={{
+            padding: "8px 14px", fontSize: 13, fontWeight: 700,
+            background: T.bg2, border: "2px solid " + T.navy, borderRadius: 10,
+            color: T.text, outline: "none", cursor: "pointer"
+          }}>
+          <option value={2}>2 semanas</option>
+          <option value={3}>3 semanas</option>
+          <option value={4}>4 semanas</option>
+        </select>
+      </div>
     </div>
 
     {/* ═══ QUEUE ALERTS — MOST IMPORTANT ═══ */}
