@@ -182,6 +182,14 @@ export default function Renovaciones(props) {
       });
       if (alreadyThisWeek) return;
 
+      // Skip if client already has a NEWER paid bono from API (already renewed)
+      var hasNewerPaidBono = allBonos.some(function (b) {
+        var bn = b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return (bn === nameNorm || bn.indexOf(nameNorm) >= 0 || nameNorm.indexOf(bn) >= 0) &&
+          b.pagado && b.fechaValor && b.fechaValor >= thisMonday;
+      });
+      if (hasNewerPaidBono) return;
+
       // Find matching CRM client
       var crmClient = clients.find(function (cl) {
         var cn = (cl.name || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
