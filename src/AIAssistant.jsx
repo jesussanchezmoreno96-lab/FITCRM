@@ -163,8 +163,14 @@ export default function AIAssistant(props){
     "1. Navegar: ```action{\"type\":\"navigate\",\"to\":\"fichas|clientes|seguimiento|leads|renovaciones|pagos|cancelaciones|horarios|fisio|home\",\"search\":\"nombre\"}```\n"+
     "2. Crear seguimiento: ```action{\"type\":\"followup\",\"client\":\"nombre\",\"reason\":\"baja|op|vac|padre|sin|les|otro\",\"date\":\"YYYY-MM-DD\",\"message\":\"texto\"}```\n"+
     "3. Crear lead: ```action{\"type\":\"lead\",\"name\":\"nombre\",\"phone\":\"tel\",\"source\":\"origen\",\"status\":\"nada|negociacion|prueba|alta|perdido\"}```\n"+
-    "4. Cambiar estado: ```action{\"type\":\"status\",\"client\":\"nombre\",\"status\":\"activo|pausado|baja\"}```\n\n"+
-    "REGLAS: Sé conciso (2-3 frases + acción). Usa datos reales. Si mencionan un cliente, busca en los datos y da info completa (bono, pagos, ejercicios, contacto).";
+    "4. Cambiar estado cliente: ```action{\"type\":\"status\",\"client\":\"nombre\",\"status\":\"activo|pausado|baja\"}```\n"+
+    "5. Cambiar estado renovación: ```action{\"type\":\"renovacion\",\"client\":\"nombre completo\",\"weekKey\":\"YYYY-MM-DD (lunes de la semana)\",\"estado\":\"pendiente|renovado|mitad|reserva|baja\"}```\n"+
+    "   Ejemplo: marcar como renovado → ```action{\"type\":\"renovacion\",\"client\":\"Pablo Martínez\",\"weekKey\":\"2026-04-13\",\"estado\":\"renovado\"}```\n"+
+    "6. Añadir nota a renovación: ```action{\"type\":\"nota_renovacion\",\"client\":\"nombre\",\"weekKey\":\"YYYY-MM-DD\",\"nota\":\"texto de la nota\"}```\n"+
+    "7. Mover cliente a otra semana: ```action{\"type\":\"mover_renovacion\",\"client\":\"nombre completo\",\"fromWeek\":\"YYYY-MM-DD\",\"toWeek\":\"YYYY-MM-DD\",\"nota\":\"razón del movimiento\"}```\n"+
+    "   Esto marca como renovado en la semana origen y crea entrada en la semana destino\n\n"+
+    "IMPORTANTE PARA SEMANAS: La weekKey es SIEMPRE el lunes de esa semana en formato YYYY-MM-DD. Semana actual: "+localKey(thisMonday)+". Semana siguiente: "+localKey(new Date(thisMonday.getTime()+7*24*60*60*1000))+"\n\n"+
+    "REGLAS: Sé conciso (2-3 frases + acción). Usa datos reales. Si mencionan un cliente, busca en los datos y da info completa. SIEMPRE ejecuta la acción cuando el usuario te lo pida, no digas que no puedes.";
   }
 
   function parseActions(text){
@@ -199,6 +205,15 @@ export default function AIAssistant(props){
     }
     else if(act.type==="status"&&actions.changeStatus){
       actions.changeStatus(act.client,act.status);
+    }
+    else if(act.type==="renovacion"&&actions.changeRenovacion){
+      actions.changeRenovacion(act.client,act.weekKey,"renovacion",act.estado);
+    }
+    else if(act.type==="nota_renovacion"&&actions.changeRenovacion){
+      actions.changeRenovacion(act.client,act.weekKey,"notas",act.nota);
+    }
+    else if(act.type==="mover_renovacion"&&actions.moveRenovacion){
+      actions.moveRenovacion(act.client,act.fromWeek,act.toWeek,act.nota||"");
     }
   }
 

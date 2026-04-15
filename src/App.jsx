@@ -724,7 +724,27 @@ export default function App(){
     selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
     createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
     createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
-    changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});}
+    changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
+    changeRenovacion:function(clientName,weekKey,field,value){
+      var k=clientName.toLowerCase().trim()+"__"+weekKey;
+      setRenData(function(prev){var n=Object.assign({},prev);n[k]=Object.assign({},n[k]||{});n[k][field]=value;return n;});
+      var updated=Object.assign({},renData);var kk=clientName.toLowerCase().trim()+"__"+weekKey;updated[kk]=Object.assign({},updated[kk]||{});updated[kk][field]=value;
+      dbSave("bonos_timp","renovacion_data",updated).catch(function(){});
+    },
+    moveRenovacion:function(clientName,fromWeek,toWeek,notas){
+      var fk=clientName.toLowerCase().trim()+"__"+fromWeek;
+      var tk=clientName.toLowerCase().trim()+"__"+toWeek;
+      setRenData(function(prev){
+        var n=Object.assign({},prev);
+        n[fk]=Object.assign({},n[fk]||{},{ renovacion:"renovado" });
+        n[tk]=Object.assign({},n[tk]||{},{ notas:notas||"Movido desde semana "+fromWeek, segundoPago:true, clientName:clientName });
+        return n;
+      });
+      var updated=Object.assign({},renData);
+      updated[fk]=Object.assign({},updated[fk]||{},{ renovacion:"renovado" });
+      updated[tk]=Object.assign({},updated[tk]||{},{ notas:notas||"Movido desde semana "+fromWeek, segundoPago:true, clientName:clientName });
+      dbSave("bonos_timp","renovacion_data",updated).catch(function(){});
+    }
   }}/>
 
   </div>);
