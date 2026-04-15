@@ -425,7 +425,7 @@ export default function App(){
         </div>
       </div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:20}}>
-        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis} timpData={timpData}/>
+        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis} timpData={timpData} bonos={bonos}/>
       </div>
       <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} actions={{
         navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
