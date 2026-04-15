@@ -64,6 +64,8 @@ export default function Renovaciones(props) {
   var nf_ = _(true), showNotifs = nf_[0], setShowNotifs = nf_[1];
   var editNote_ = _(null), editNote = editNote_[0], setEditNote = editNote_[1];
   var noteTmp_ = _(""), noteTmp = noteTmp_[0], setNoteTmp = noteTmp_[1];
+  var moveClient_ = _(null), moveClient = moveClient_[0], setMoveClient = moveClient_[1];
+  var moveTarget_ = _(""), moveTarget = moveTarget_[0], setMoveTarget = moveTarget_[1];
 
   if (!bonos.length) {
     return (<div>
@@ -538,6 +540,18 @@ export default function Renovaciones(props) {
                 cursor: "pointer", fontSize: 14, color: data.avisado ? "#3b82f6" : T.text3,
                 padding: 0, flexShrink: 0
               }}>{data.avisado ? "✓" : "📢"}</button>
+
+            {/* Move to another week */}
+            <button onClick={function () { setMoveClient(r); setMoveTarget(""); }}
+              title="Mover a otra semana"
+              style={{
+                width: 36, height: 36, borderRadius: 9,
+                border: "2px solid " + T.border2,
+                background: "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", fontSize: 14, color: T.text3,
+                padding: 0, flexShrink: 0
+              }}>📅</button>
           </div>
 
           {/* Notes — always visible, click to edit */}
@@ -581,6 +595,63 @@ export default function Renovaciones(props) {
           </div>
         </div>;
       })}
+    </div>}
+
+    {/* ═══ MOVE MODAL ═══ */}
+    {moveClient && <div onClick={function () { setMoveClient(null); }} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.6)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000
+    }}>
+      <div onClick={function (e) { e.stopPropagation(); }} style={{
+        background: T.bg2, borderRadius: 16, padding: 24, width: "90%", maxWidth: 380,
+        border: "1px solid " + T.border2
+      }}>
+        <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 800 }}>📅 Mover renovación</h3>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 12 }}>{moveClient.nombre}</div>
+        <div style={{ fontSize: 12, color: T.text3, marginBottom: 16 }}>Selecciona la semana destino:</div>
+        <select value={moveTarget} onChange={function (e) { setMoveTarget(e.target.value); }}
+          style={{
+            width: "100%", padding: "12px 16px", fontSize: 14, fontWeight: 700,
+            background: T.bg3, border: "2px solid " + T.navy, borderRadius: 10,
+            color: T.text, outline: "none", cursor: "pointer", marginBottom: 16, boxSizing: "border-box"
+          }}>
+          <option value="">— Elige semana —</option>
+          {weekList.filter(function (w) { return w.key !== selWeek.key; }).map(function (w) {
+            var isThis = w.monday.getTime() === thisMonday.getTime();
+            return <option key={w.key} value={w.key}>
+              {weekShort(w.monday)}{isThis ? " ← Esta semana" : ""} ({w.clients.length} clientes)
+            </option>;
+          })}
+        </select>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={function () { setMoveClient(null); }}
+            style={{ flex: 1, padding: 10, background: T.bg3, border: "1px solid " + T.border2, borderRadius: 9, color: T.text2, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={function () {
+            if (!moveTarget) return;
+            var fromKey = selWeek.key;
+            var n = Object.assign({}, renData);
+            var fk = moveClient.nombre.toLowerCase().trim() + "__" + fromKey;
+            var tk = moveClient.nombre.toLowerCase().trim() + "__" + moveTarget;
+            n[fk] = Object.assign({}, n[fk] || {}, { renovacion: "renovado", notas: (n[fk] && n[fk].notas ? n[fk].notas + " | " : "") + "→ Movido a " + moveTarget });
+            n[tk] = Object.assign({}, n[tk] || {}, { notas: "Movido desde " + fromKey, segundoPago: true, clientName: moveClient.nombre });
+            if (setRenData) setRenData(n);
+            if (onSaveRenData) onSaveRenData(n);
+            setMoveClient(null);
+          }}
+            style={{ flex: 1, padding: 10, background: "linear-gradient(135deg,#394265,#4a5580)", border: "none", borderRadius: 9, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Mover</button>
+        </div>
+        <button onClick={function () {
+          if (!confirm("¿Eliminar a " + moveClient.nombre + " de renovaciones de esta semana?")) return;
+          var fromKey = selWeek.key;
+          var n = Object.assign({}, renData);
+          var fk = moveClient.nombre.toLowerCase().trim() + "__" + fromKey;
+          n[fk] = Object.assign({}, n[fk] || {}, { renovacion: "renovado", notas: (n[fk] && n[fk].notas ? n[fk].notas + " | " : "") + "Eliminado de esta semana" });
+          if (setRenData) setRenData(n);
+          if (onSaveRenData) onSaveRenData(n);
+          setMoveClient(null);
+        }}
+          style={{ width: "100%", padding: 10, background: "#ef444410", border: "1px solid #ef444430", borderRadius: 9, color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 10 }}>🗑️ Eliminar de esta semana</button>
+      </div>
     </div>}
   </div>);
 }
