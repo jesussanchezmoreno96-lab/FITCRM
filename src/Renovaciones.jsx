@@ -326,7 +326,7 @@ export default function Renovaciones(props) {
   if (thisWeekData) {
     thisWeekData.clients.forEach(function (r) {
       var d = rd(r.nombre, thisWeekData.key);
-      if (d.renovacion === "renovado" || d.renovacion === "baja" || r.pagado) return;
+      if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva" || r.pagado || r.mitadPagada || r.esReserva) return;
       if (r.nextBooking) {
         try {
           var bd = new Date(r.nextBooking);
