@@ -390,7 +390,6 @@ export default function App(){
         if(pend>0){homeDeuda+=pend;homePagosPend++;}
       }
     });
-    // Renovaciones this week
     var now=new Date();var day=now.getDay();var mon=new Date(now);mon.setDate(mon.getDate()-(day===0?6:day-1));mon.setHours(0,0,0,0);
     var homeRenovaciones=0;var homeRenovadosEsta=0;
     var seenHomeRen={};
@@ -403,100 +402,153 @@ export default function App(){
       homeRenovaciones++;
       if(b.pagado)homeRenovadosEsta++;
     });
+    var homePendRen=homeRenovaciones-homeRenovadosEsta;
     return(
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif",padding:"20px 24px"}}>
       {/* Top bar */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,maxWidth:1200,margin:"0 auto 28px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,maxWidth:1100,margin:"0 auto 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <img src="/logo.png" alt="time2train" style={{height:42,filter:dk?"brightness(0) invert(1)":"none"}}/>
+          <img src="/logo.png" alt="time2train" style={{height:36,filter:dk?"brightness(0) invert(1)":"none"}}/>
           <div>
-            <div style={{fontSize:18,fontWeight:900,color:T.text}}>T2Tcrm</div>
-            <div style={{fontSize:11,color:T.text3}}>Hola Jesús · {new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
+            <div style={{fontSize:16,fontWeight:900,color:T.text}}>T2Tcrm</div>
+            <div style={{fontSize:10,color:T.text3}}>Hola Jesús · {new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
           </div>
         </div>
-        <button onClick={function(){setTheme(dk?"light":"dark");}} style={{padding:"8px 14px",background:T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{dk?"☀️":"🌙"}</button>
+        <button onClick={function(){setTheme(dk?"light":"dark");}} style={{padding:"6px 12px",background:T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:12,cursor:"pointer"}}>{dk?"☀️":"🌙"}</button>
       </div>
 
-      <div style={{maxWidth:1200,margin:"0 auto"}}>
-        {/* KPI BIG CARDS */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:20}}>
-          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Clientes activos</div>
-            <div style={{fontSize:34,fontWeight:900,color:"#22c55e",lineHeight:1}}>{cn.a}</div>
-            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{cn.b} bajas</div>
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        {/* ═══ KPIs ═══ */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:28}}>
+          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Clientes activos</div>
+            <div style={{fontSize:30,fontWeight:900,color:"#22c55e",lineHeight:1}}>{cn.a}</div>
           </div>
-          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Deuda pendiente</div>
-            <div style={{fontSize:34,fontWeight:900,color:"#ef4444",lineHeight:1}}>{Math.round(homeDeuda).toLocaleString("es-ES")}€</div>
-            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{homePagosPend} pagos</div>
+          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Deuda pendiente</div>
+            <div style={{fontSize:30,fontWeight:900,color:"#ef4444",lineHeight:1}}>{Math.round(homeDeuda).toLocaleString("es-ES")}€</div>
           </div>
-          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Renovaciones</div>
-            <div style={{fontSize:34,fontWeight:900,color:"#6366f1",lineHeight:1}}>{homeRenovaciones}</div>
-            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{homeRenovadosEsta} renovados</div>
+          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Renovaciones sem.</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+              <span style={{fontSize:30,fontWeight:900,color:"#6366f1",lineHeight:1}}>{homeRenovaciones}</span>
+              {homePendRen>0&&<span style={{fontSize:11,color:"#f59e0b",fontWeight:700}}>{homePendRen} pend.</span>}
+            </div>
           </div>
-          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Avisos hoy</div>
-            <div style={{fontSize:34,fontWeight:900,color:totalAlerts>0?"#f59e0b":T.text3,lineHeight:1}}>{totalAlerts}</div>
-            <div style={{fontSize:10,color:T.text3,marginTop:4}}>seguimientos pendientes</div>
+          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Leads mes</div>
+            <div style={{fontSize:30,fontWeight:900,color:"#a78bfa",lineHeight:1}}>{le.filter(function(l){return l.month===["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][now.getMonth()];}).length}</div>
           </div>
         </div>
 
-        {/* QUICK ACTIONS */}
-        <div style={{fontSize:13,fontWeight:800,color:T.text,marginBottom:12,letterSpacing:0.3}}>ACCESOS RÁPIDOS</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
-          <button onClick={function(){setSec("entrenamiento");setMv("renovaciones");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>🔄</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Renovaciones</div><div style={{fontSize:10,color:T.text3}}>{homeRenovaciones} esta semana</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("pagos");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>💰</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Pagos</div><div style={{fontSize:10,color:"#ef4444"}}>{homePagosPend} pendientes</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("cancelaciones");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>🚫</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Cancelaciones</div><div style={{fontSize:10,color:T.text3}}>ver hoy</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("panel");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>👥</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Clientes</div><div style={{fontSize:10,color:T.text3}}>{cn.a} activos</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("seguimiento");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>📋</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Seguimiento</div><div style={{fontSize:10,color:pc>0?"#f59e0b":T.text3}}>{pc} pendientes</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("leads");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:26}}>🎯</div>
-            <div><div style={{fontSize:13,fontWeight:800}}>Leads</div><div style={{fontSize:10,color:T.text3}}>{le.length} total</div></div>
-          </button>
+        {/* ═══ 3 MÓDULOS PRINCIPALES ═══ */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:24}}>
+
+          {/* ── ENTRENAMIENTO ── */}
+          <div style={{background:dk?"linear-gradient(135deg,#151a2e,#0f1320)":T.bg2,borderRadius:18,border:"2px solid "+T.navy+"40",overflow:"hidden"}}>
+            <div style={{padding:"20px 22px 14px",borderBottom:"1px solid "+T.border}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:28}}>🏋️</span>
+                <div>
+                  <div style={{fontSize:18,fontWeight:900,color:T.text}}>Entrenamiento</div>
+                  <div style={{fontSize:10,color:T.text3}}>{cn.a} activos · {cn.b} bajas</div>
+                </div>
+              </div>
+              {/* Mini alerts */}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {homePagosPend>0&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:5,background:"#ef444415",color:"#ef4444",fontWeight:700}}>{homePagosPend} pagos pend.</span>}
+                {homePendRen>0&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:5,background:"#f59e0b15",color:"#f59e0b",fontWeight:700}}>{homePendRen} renovaciones pend.</span>}
+                {pc>0&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:5,background:"#6366f115",color:"#6366f1",fontWeight:700}}>{pc} seguimientos</span>}
+              </div>
+            </div>
+            {/* Sub-modules */}
+            <div style={{padding:"8px 10px"}}>
+              {[
+                {icon:"🔄",label:"Renovaciones",sub:homeRenovaciones+" esta sem.",view:"renovaciones",alert:homePendRen>0},
+                {icon:"💰",label:"Pagos",sub:homePagosPend+" pendientes",view:"pagos",alert:homePagosPend>0},
+                {icon:"🚫",label:"Cancelaciones",sub:"ver hoy",view:"cancelaciones"},
+                {icon:"👥",label:"Clientes",sub:cn.a+" activos",view:"panel"},
+                {icon:"📇",label:"Fichas",sub:"ejercicios",view:"clientes"},
+                {icon:"📋",label:"Seguimiento",sub:pc+" pend.",view:"seguimiento",alert:pc>0},
+                {icon:"🎯",label:"Leads",sub:le.length+" total",view:"leads"},
+                {icon:"📅",label:"Horarios",sub:"equipo",view:"horarios"}
+              ].map(function(item){return<button key={item.view} onClick={function(){setSec("entrenamiento");setMv(item.view);}} style={{
+                width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid "+T.border+"60",
+                cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:T.text,textAlign:"left"
+              }}>
+                <span style={{fontSize:16}}>{item.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700}}>{item.label}</div>
+                  <div style={{fontSize:9,color:item.alert?"#f59e0b":T.text3}}>{item.sub}</div>
+                </div>
+                <span style={{fontSize:12,color:T.text3}}>›</span>
+              </button>;})}
+            </div>
+          </div>
+
+          {/* ── FISIOTERAPIA ── */}
+          <div style={{background:dk?"linear-gradient(135deg,#1a0f2e,#0f1320)":T.bg2,borderRadius:18,border:"2px solid #a78bfa30",overflow:"hidden"}}>
+            <div style={{padding:"20px 22px 14px",borderBottom:"1px solid "+T.border}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:28}}>🩺</span>
+                <div>
+                  <div style={{fontSize:18,fontWeight:900,color:T.text}}>Fisioterapia</div>
+                  <div style={{fontSize:10,color:T.text3}}>{fis.length} reportes</div>
+                </div>
+              </div>
+              {fisioAlerts.length>0&&<span style={{fontSize:9,padding:"3px 8px",borderRadius:5,background:"#a78bfa15",color:"#a78bfa",fontWeight:700}}>{fisioAlerts.length} avisos hoy</span>}
+            </div>
+            <div style={{padding:"8px 10px"}}>
+              <button onClick={function(){setSec("fisio");}} style={{
+                width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid "+T.border+"60",
+                cursor:"pointer",display:"flex",alignItems:"center",gap:10,color:T.text,textAlign:"left"
+              }}>
+                <span style={{fontSize:16}}>📋</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700}}>Reportes y valoraciones</div>
+                  <div style={{fontSize:9,color:T.text3}}>{fis.length} informes</div>
+                </div>
+                <span style={{fontSize:12,color:T.text3}}>›</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ── NUTRICIÓN ── */}
+          <div style={{background:dk?"linear-gradient(135deg,#0f1e15,#0f1320)":T.bg2,borderRadius:18,border:"2px solid #22c55e30",overflow:"hidden"}}>
+            <div style={{padding:"20px 22px 14px",borderBottom:"1px solid "+T.border}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:28}}>🥗</span>
+                <div>
+                  <div style={{fontSize:18,fontWeight:900,color:T.text}}>Nutrición</div>
+                  <div style={{fontSize:10,color:T.text3}}>Próximamente</div>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"20px 22px",textAlign:"center"}}>
+              <div style={{fontSize:36,opacity:0.15,marginBottom:8}}>🥗</div>
+              <div style={{fontSize:11,color:T.text3}}>Módulo en desarrollo</div>
+            </div>
+          </div>
         </div>
 
-        {/* SECONDARY MODULES */}
-        <div style={{fontSize:13,fontWeight:800,color:T.text,marginBottom:12,letterSpacing:0.3}}>OTROS MÓDULOS</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-          <button onClick={function(){setSec("dashboard");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:22}}>📊</div>
-            <div><div style={{fontSize:13,fontWeight:700}}>Dashboard</div><div style={{fontSize:10,color:T.text3}}>Reportes mensuales</div></div>
-          </button>
-          <button onClick={function(){setSec("fisio");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:22}}>🩺</div>
-            <div><div style={{fontSize:13,fontWeight:700}}>Fisioterapia</div><div style={{fontSize:10,color:fisioAlerts.length>0?"#a78bfa":T.text3}}>{fisioAlerts.length>0?fisioAlerts.length+" avisos":"Reportes"}</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("horarios");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:22}}>📅</div>
-            <div><div style={{fontSize:13,fontWeight:700}}>Horarios</div><div style={{fontSize:10,color:T.text3}}>Equipo</div></div>
-          </button>
-          <button onClick={function(){setSec("entrenamiento");setMv("clientes");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{fontSize:22}}>📇</div>
-            <div><div style={{fontSize:13,fontWeight:700}}>Fichas</div><div style={{fontSize:10,color:T.text3}}>Buscar clientes</div></div>
-          </button>
-        </div>
+        {/* ═══ DASHBOARD BUTTON ═══ */}
+        <button onClick={function(){setSec("dashboard");}} style={{
+          width:"100%",padding:"14px 22px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,
+          cursor:"pointer",display:"flex",alignItems:"center",gap:12,color:T.text,textAlign:"left",marginBottom:16
+        }}>
+          <span style={{fontSize:22}}>📊</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:800}}>Dashboard</div>
+            <div style={{fontSize:10,color:T.text3}}>Reportes mensuales · Métricas · Leads</div>
+          </div>
+          <span style={{fontSize:14,color:T.text3}}>→</span>
+        </button>
 
         {/* TIMP Sync status */}
-        <div style={{marginTop:24,textAlign:"center"}}>
-          {timpSyncing&&<div style={{fontSize:11,color:T.text3}}>🔄 Sincronizando con TIMP...</div>}
-          {timpData&&<div style={{fontSize:10,color:"#22c55e"}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership||s.next_booking_for;}).length} con bono · {timpData.filter(function(s){return s.payment_pending&&(s.active_membership||s.next_booking_for);}).length} pagos pendientes {timpLast?" · Última sync: "+timpLast:""}</div>}
-          {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"8px 20px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar con TIMP</button>}
+        <div style={{textAlign:"center",marginTop:8}}>
+          {timpSyncing&&<div style={{fontSize:10,color:T.text3}}>🔄 Sincronizando...</div>}
+          {timpData&&<div style={{fontSize:9,color:"#22c55e"}}>✓ TIMP sync — {timpData.filter(function(s){return s.active_membership;}).length} activos {timpLast?" · "+timpLast:""}</div>}
+          {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"6px 16px",background:"#394265",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar TIMP</button>}
         </div>
       </div>
     </div>
