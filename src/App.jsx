@@ -133,20 +133,23 @@ export default function App(){
               var fv=new Date(b.fechaValor);
               return fv>now;
             });
-            // ALTA: tiene bono activo O bono futuro → CRM activo
-            if((tieneBono||tienBonoFuturo)&&c.status!=="activo"){
+            // Check if client has ANY training bono (not only fisio)
+            // bonos array is already filtered: only contains training bonos
+            var tieneEntrenamiento=bonos.some(function(b){return b.suscriptionUuid===match.uuid;});
+            // ALTA: tiene bono activo de entrenamiento → CRM activo
+            if((tieneBono||tienBonoFuturo)&&tieneEntrenamiento&&c.status!=="activo"){
               upd.status="activo";
               upd.timpAlert="Alta automática desde TIMP";
               upd.timpAltaDate=now.toISOString();
             }
-            // BAJA: sin bono activo NI reserva NI bono futuro → baja
-            else if(!tieneBono&&!tienBonoFuturo&&c.status==="activo"){
+            // BAJA: sin bono activo NI reserva NI bono futuro NI bonos de entrenamiento
+            else if((!tieneBono&&!tienBonoFuturo||!tieneEntrenamiento)&&c.status==="activo"){
               upd.status="baja";
-              upd.timpAlert="Baja automática (sin bono activo en TIMP)";
-              upd.motivoBaja="Sin bono activo en TIMP";
+              upd.timpAlert=tieneEntrenamiento?"Baja automática (sin bono activo en TIMP)":"Solo tiene bonos de fisioterapia";
+              upd.motivoBaja=tieneEntrenamiento?"Sin bono activo en TIMP":"Solo fisioterapia";
             }
             // Activo en ambos, todo OK
-            else if((tieneBono||tienBonoFuturo)&&c.status==="activo"){
+            else if((tieneBono||tienBonoFuturo)&&tieneEntrenamiento&&c.status==="activo"){
               upd.timpAlert=null;
             }
             return upd;
@@ -213,10 +216,19 @@ export default function App(){
       var autos=autoData.collection;
       var subs=(subsData&&subsData.collection)||[];
       var parsed=[];
+      // Bonos de fisioterapia (no cuentan para renovaciones de entrenamiento)
+      var FISIO_BONOS=["bono 10 sesiones","bono 10 socios","bono 5 sesiones","bono 5 socios","individual","individual socio","sesión 30 minutos","sesion 30 minutos","sesión reducida","sesion reducida"];
+      function isFisioBono(caption){
+        if(!caption)return false;
+        var c=caption.toLowerCase().trim();
+        return FISIO_BONOS.some(function(fb){return c===fb||c.indexOf(fb)>=0;});
+      }
       autos.forEach(function(a){
         if(a.removed)return;
         var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
         if(!sub||!sub.full_name)return;
+        // Skip fisio bonos — they don't count for training renewals
+        if(isFisioBono(a.caption))return;
         // Skip clients without active membership
         if(!sub.active_membership)return;
         var fechaValor=null;var fechaFin=null;
