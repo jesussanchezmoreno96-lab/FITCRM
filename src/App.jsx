@@ -418,26 +418,20 @@ export default function App(){
       </div>
 
       <div style={{maxWidth:1100,margin:"0 auto"}}>
-        {/* ═══ KPIs ═══ */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:28}}>
-          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Clientes activos</div>
-            <div style={{fontSize:30,fontWeight:900,color:"#22c55e",lineHeight:1}}>{cn.a}</div>
-          </div>
-          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Deuda pendiente</div>
-            <div style={{fontSize:30,fontWeight:900,color:"#ef4444",lineHeight:1}}>{Math.round(homeDeuda).toLocaleString("es-ES")}€</div>
-          </div>
-          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Renovaciones sem.</div>
-            <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-              <span style={{fontSize:30,fontWeight:900,color:"#6366f1",lineHeight:1}}>{homeRenovaciones}</span>
-              {homePendRen>0&&<span style={{fontSize:11,color:"#f59e0b",fontWeight:700}}>{homePendRen} pend.</span>}
-            </div>
-          </div>
-          <div style={{background:T.bg2,borderRadius:14,padding:"16px 18px",border:"1px solid "+T.border}}>
-            <div style={{fontSize:10,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Leads mes</div>
-            <div style={{fontSize:30,fontWeight:900,color:"#a78bfa",lineHeight:1}}>{le.filter(function(l){return l.month===["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][now.getMonth()];}).length}</div>
+        {/* ═══ AI ASSISTANT BAR ═══ */}
+        <div style={{background:T.bg2,borderRadius:16,border:"1px solid "+T.border,padding:"16px 20px",marginBottom:24,display:"flex",alignItems:"center",gap:14}}>
+          <span style={{fontSize:28}}>🤖</span>
+          <div style={{flex:1}}>
+            <input
+              placeholder="Pregúntame lo que quieras... (ej: ¿Quién renueva esta semana? / Info de Pablo Martínez)"
+              onFocus={function(){setSec("entrenamiento");setMv("clientes");setTimeout(function(){var btn=document.querySelector('[style*=\"position: fixed\"][style*=\"bottom: 20\"]');if(btn)btn.click();},300);}}
+              style={{
+                width:"100%",padding:"12px 16px",background:T.bg3,border:"1px solid "+T.border2,
+                borderRadius:12,color:T.text,fontSize:14,outline:"none",boxSizing:"border-box",
+                cursor:"pointer"
+              }}
+              readOnly
+            />
           </div>
         </div>
 
