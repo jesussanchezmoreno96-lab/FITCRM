@@ -375,60 +375,132 @@ export default function App(){
 
   if(!ld)return <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{padding:"8px 20px",background:"#394265",borderRadius:10,color:"#fff",fontSize:18,fontWeight:900,letterSpacing:1}}>time2train</div><div style={{color:"#394265",fontSize:14,fontWeight:600}}>Cargando T2Tcrm...</div></div>;
 
-  /* ═══ HOME SCREEN ═══ */  if(sec==="home") return(
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div style={{position:"absolute",top:16,right:20}}><button onClick={function(){setTheme(dk?"light":"dark");}} style={{padding:"8px 14px",background:T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{dk?"☀️ Claro":"🌙 Oscuro"}</button></div>
-      <div style={{padding:"12px 28px",background:"#394265",borderRadius:14,marginBottom:12}}><span style={{color:"#fff",fontSize:28,fontWeight:900,letterSpacing:1}}>time<span style={{color:"#8ba3d9"}}>2</span>train</span></div>
-      <h1 style={{margin:0,fontSize:26,fontWeight:900,color:T.text}}>T2Tcrm</h1>
-      <p style={{color:T.text3,fontSize:13,marginBottom:40}}>Gestión integral del centro</p>
-      <div style={{display:"flex",gap:20,flexWrap:"wrap",justifyContent:"center",maxWidth:900}}>
-        <button onClick={function(){setSec("entrenamiento");setMv("clientes");}} style={{width:260,padding:"40px 30px",background:dk?"linear-gradient(135deg,#1a2040,#141820)":T.bg2,border:"2px solid "+T.navy+"30",borderRadius:20,cursor:"pointer",textAlign:"center",boxShadow:dk?"none":"0 4px 16px rgba(0,0,0,.08)"}}>
-          <div style={{fontSize:48,marginBottom:12}}>🏋️</div>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:6}}>Entrenamiento</div>
-          <div style={{fontSize:12,color:T.text3}}>Clientes, fichas, seguimiento y leads</div>
-          <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:14}}>
-            <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"#22c55e15",color:"#22c55e",fontWeight:600}}>{cn.a} activos</span>
-            {pc>0&&<span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"#ef444415",color:"#ef4444",fontWeight:600}}>{pc} avisos</span>}
+  /* ═══ HOME SCREEN ═══ */  if(sec==="home") {
+    // Calculate home KPIs
+    var homeDeuda=0;var homePagosPend=0;
+    var seenHomePagos={};
+    (bonos||[]).forEach(function(b){
+      var caption=(b.tipoBono||b.concepto||"").toLowerCase();
+      var isEnt=caption.indexOf("time")>=0||caption.indexOf("partner")>=0||caption.indexOf("pro")>=0||caption.indexOf("bono")>=0||caption.indexOf("sesion")>=0||caption.indexOf("dual")>=0;
+      if(!isEnt)return;
+      var key=b.nombre+"__"+(b.fechaValor||"");
+      if(seenHomePagos[key])return;seenHomePagos[key]=true;
+      if(!b.pagado){
+        var pend=b.fraccionado?((b.precio||0)-(b.importePagado||0)):(b.precio||0);
+        if(pend>0){homeDeuda+=pend;homePagosPend++;}
+      }
+    });
+    // Renovaciones this week
+    var now=new Date();var day=now.getDay();var mon=new Date(now);mon.setDate(mon.getDate()-(day===0?6:day-1));mon.setHours(0,0,0,0);
+    var homeRenovaciones=0;var homeRenovadosEsta=0;
+    var seenHomeRen={};
+    (bonos||[]).forEach(function(b){
+      var fv=b.fechaValor?new Date(b.fechaValor):null;
+      if(!fv||isNaN(fv))return;
+      var bm=new Date(fv);var bd=bm.getDay();bm.setDate(bm.getDate()-(bd===0?6:bd-1));bm.setHours(0,0,0,0);
+      if(bm.getTime()!==mon.getTime())return;
+      if(seenHomeRen[b.nombre])return;seenHomeRen[b.nombre]=true;
+      homeRenovaciones++;
+      if(b.pagado)homeRenovadosEsta++;
+    });
+    return(
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif",padding:"20px 24px"}}>
+      {/* Top bar */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,maxWidth:1200,margin:"0 auto 28px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <div style={{padding:"8px 18px",background:"#394265",borderRadius:10}}><span style={{color:"#fff",fontSize:18,fontWeight:900,letterSpacing:1}}>time<span style={{color:"#8ba3d9"}}>2</span>train</span></div>
+          <div>
+            <div style={{fontSize:18,fontWeight:900,color:T.text}}>T2Tcrm</div>
+            <div style={{fontSize:11,color:T.text3}}>Hola Jesús · {new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
           </div>
-        </button>
-        <button onClick={function(){setSec("nutricion");}} style={{width:260,padding:"40px 30px",background:dk?"linear-gradient(135deg,#0a1a10,#141820)":T.bg2,border:"2px solid #22c55e20",borderRadius:20,cursor:"pointer",textAlign:"center",boxShadow:dk?"none":"0 4px 16px rgba(0,0,0,.08)"}}>
-          <div style={{fontSize:48,marginBottom:12}}>🥗</div>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:6}}>Nutrición</div>
-          <div style={{fontSize:12,color:T.text3}}>Próximamente</div>
-        </button>
-        <button onClick={function(){setSec("fisio");}} style={{width:260,padding:"40px 30px",background:dk?"linear-gradient(135deg,#1a0a2a,#141820)":T.bg2,border:"2px solid #a78bfa20",borderRadius:20,cursor:"pointer",textAlign:"center",boxShadow:dk?"none":"0 4px 16px rgba(0,0,0,.08)"}}>
-          <div style={{fontSize:48,marginBottom:12}}>🩺</div>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:6}}>Fisioterapia</div>
-          <div style={{fontSize:12,color:T.text3}}>Reportes y valoraciones</div>
-          {fisioAlerts.length>0&&<div style={{marginTop:10}}><span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:"#a78bfa15",color:"#a78bfa",fontWeight:600}}>{fisioAlerts.length} avisos hoy</span></div>}
-        </button>
-        {/* Dashboard */}
-        <button onClick={function(){setSec("dashboard");}} style={{width:260,padding:"40px 30px",background:dk?"linear-gradient(135deg,#1a1a10,#141820)":T.bg2,border:"2px solid #f59e0b20",borderRadius:20,cursor:"pointer",textAlign:"center",boxShadow:dk?"none":"0 4px 16px rgba(0,0,0,.08)"}}>
-          <div style={{fontSize:48,marginBottom:12}}>📊</div>
-          <div style={{fontSize:20,fontWeight:800,color:T.text,marginBottom:6}}>Dashboard</div>
-          <div style={{fontSize:12,color:T.text3}}>Reportes y métricas mensuales</div>
-        </button>
+        </div>
+        <button onClick={function(){setTheme(dk?"light":"dark");}} style={{padding:"8px 14px",background:T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>{dk?"☀️":"🌙"}</button>
       </div>
-      {/* TIMP Sync */}
-      <div style={{marginTop:30,textAlign:"center"}}>
-        {timpSyncing&&<div style={{fontSize:12,color:T.text3}}>🔄 Sincronizando con TIMP...</div>}
-        {timpData&&<div>
-          <div style={{fontSize:10,color:"#22c55e",marginBottom:4}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership||s.next_booking_for;}).length} con bono · {timpData.filter(function(s){return s.payment_pending&&(s.active_membership||s.next_booking_for);}).length} pagos pendientes</div>
-          <div style={{fontSize:10,color:T.text3,marginBottom:8}}>Última sync: {timpLast}</div>
-          <button onClick={syncTimp} disabled={timpSyncing} style={{padding:"6px 16px",background:"transparent",border:"1px solid "+T.border,borderRadius:8,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>↻ Actualizar</button>
-        </div>}
-        {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"10px 24px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar con TIMP</button>}
-      </div>
-      {/* Import cuotas */}
-      <div style={{marginTop:16,textAlign:"center"}}>
-        <label style={{padding:"8px 18px",background:dk?"#1e2330":T.bg2,border:"1px solid "+T.border,borderRadius:8,color:T.text2,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-block"}}>
-          📤 Importar Cuotas TIMP
-          <input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{display:"none"}}/>
-        </label>
-        {bonos.length>0&&<div style={{fontSize:10,color:"#22c55e",marginTop:6}}>✓ {bonos.length} cuotas cargadas</div>}
+
+      <div style={{maxWidth:1200,margin:"0 auto"}}>
+        {/* KPI BIG CARDS */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:20}}>
+          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Clientes activos</div>
+            <div style={{fontSize:34,fontWeight:900,color:"#22c55e",lineHeight:1}}>{cn.a}</div>
+            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{cn.b} bajas</div>
+          </div>
+          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Deuda pendiente</div>
+            <div style={{fontSize:34,fontWeight:900,color:"#ef4444",lineHeight:1}}>{Math.round(homeDeuda).toLocaleString("es-ES")}€</div>
+            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{homePagosPend} pagos</div>
+          </div>
+          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Renovaciones</div>
+            <div style={{fontSize:34,fontWeight:900,color:"#6366f1",lineHeight:1}}>{homeRenovaciones}</div>
+            <div style={{fontSize:10,color:T.text3,marginTop:4}}>{homeRenovadosEsta} renovados</div>
+          </div>
+          <div style={{background:T.bg2,borderRadius:16,padding:"20px 22px",border:"1px solid "+T.border}}>
+            <div style={{fontSize:11,color:T.text3,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Avisos hoy</div>
+            <div style={{fontSize:34,fontWeight:900,color:totalAlerts>0?"#f59e0b":T.text3,lineHeight:1}}>{totalAlerts}</div>
+            <div style={{fontSize:10,color:T.text3,marginTop:4}}>seguimientos pendientes</div>
+          </div>
+        </div>
+
+        {/* QUICK ACTIONS */}
+        <div style={{fontSize:13,fontWeight:800,color:T.text,marginBottom:12,letterSpacing:0.3}}>ACCESOS RÁPIDOS</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
+          <button onClick={function(){setSec("entrenamiento");setMv("renovaciones");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>🔄</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Renovaciones</div><div style={{fontSize:10,color:T.text3}}>{homeRenovaciones} esta semana</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("pagos");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>💰</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Pagos</div><div style={{fontSize:10,color:"#ef4444"}}>{homePagosPend} pendientes</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("cancelaciones");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>🚫</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Cancelaciones</div><div style={{fontSize:10,color:T.text3}}>ver hoy</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("panel");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>👥</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Clientes</div><div style={{fontSize:10,color:T.text3}}>{cn.a} activos</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("seguimiento");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>📋</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Seguimiento</div><div style={{fontSize:10,color:pc>0?"#f59e0b":T.text3}}>{pc} pendientes</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("leads");}} style={{padding:"18px 16px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:26}}>🎯</div>
+            <div><div style={{fontSize:13,fontWeight:800}}>Leads</div><div style={{fontSize:10,color:T.text3}}>{le.length} total</div></div>
+          </button>
+        </div>
+
+        {/* SECONDARY MODULES */}
+        <div style={{fontSize:13,fontWeight:800,color:T.text,marginBottom:12,letterSpacing:0.3}}>OTROS MÓDULOS</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+          <button onClick={function(){setSec("dashboard");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>📊</div>
+            <div><div style={{fontSize:13,fontWeight:700}}>Dashboard</div><div style={{fontSize:10,color:T.text3}}>Reportes mensuales</div></div>
+          </button>
+          <button onClick={function(){setSec("fisio");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>🩺</div>
+            <div><div style={{fontSize:13,fontWeight:700}}>Fisioterapia</div><div style={{fontSize:10,color:fisioAlerts.length>0?"#a78bfa":T.text3}}>{fisioAlerts.length>0?fisioAlerts.length+" avisos":"Reportes"}</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("horarios");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>📅</div>
+            <div><div style={{fontSize:13,fontWeight:700}}>Horarios</div><div style={{fontSize:10,color:T.text3}}>Equipo</div></div>
+          </button>
+          <button onClick={function(){setSec("entrenamiento");setMv("clientes");}} style={{padding:"16px 18px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,cursor:"pointer",textAlign:"left",color:T.text,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>📇</div>
+            <div><div style={{fontSize:13,fontWeight:700}}>Fichas</div><div style={{fontSize:10,color:T.text3}}>Buscar clientes</div></div>
+          </button>
+        </div>
+
+        {/* TIMP Sync status */}
+        <div style={{marginTop:24,textAlign:"center"}}>
+          {timpSyncing&&<div style={{fontSize:11,color:T.text3}}>🔄 Sincronizando con TIMP...</div>}
+          {timpData&&<div style={{fontSize:10,color:"#22c55e"}}>✓ TIMP sincronizado — {timpData.filter(function(s){return s.active_membership||s.next_booking_for;}).length} con bono · {timpData.filter(function(s){return s.payment_pending&&(s.active_membership||s.next_booking_for);}).length} pagos pendientes {timpLast?" · Última sync: "+timpLast:""}</div>}
+          {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"8px 20px",background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar con TIMP</button>}
+        </div>
       </div>
     </div>
-  );
+  );}
 
   /* ═══ DASHBOARD ═══ */
   if(sec==="dashboard") return(
