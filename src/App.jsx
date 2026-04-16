@@ -216,27 +216,25 @@ export default function App(){
       var autos=autoData.collection;
       var subs=(subsData&&subsData.collection)||[];
       var parsed=[];
-      // Bonos que NO son de entrenamiento (no cuentan para renovaciones)
-      var NO_ENTRENAMIENTO=[
-        // Fisioterapia
-        "bono 10 sesiones","bono 10 socios","bono 5 sesiones","bono 5 socios",
-        "individual","individual socio","sesión 30 minutos","sesion 30 minutos",
-        "sesión reducida","sesion reducida",
-        // Nutrición
-        "consulta inicial nutrición","consulta inicial nutricion","consultas sucesivas",
-        "nutrición seguimiento","nutricion seguimiento","nutrición valoración inicial","nutricion valoracion inicial"
+      // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
+      var ENTRENAMIENTO_BONOS=[
+        "bono 10 sesiones duales","bono 20 sesiones duales","bono 5 sesiones duales",
+        "entrenamiento sesión","entrenamiento sesion",
+        "time partner","time partner plus","time partner plus trimestral",
+        "time partner pro","time partner pro trimestral","time partner trimestral",
+        "time pro+","time pro trimestral+","time pro trimestral +"
       ];
-      function isNonTrainingBono(caption){
+      function isTrainingBono(caption){
         if(!caption)return false;
         var c=caption.toLowerCase().trim();
-        return NO_ENTRENAMIENTO.some(function(fb){return c===fb||c.indexOf(fb)>=0;});
+        return ENTRENAMIENTO_BONOS.some(function(tb){return c===tb||c.indexOf(tb)>=0;});
       }
       autos.forEach(function(a){
         if(a.removed)return;
         var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
         if(!sub||!sub.full_name)return;
-        // Skip non-training bonos (fisio, nutrición) — they don't count for training renewals
-        if(isNonTrainingBono(a.caption))return;
+        // Only accept training bonos (whitelist)
+        if(!isTrainingBono(a.caption))return;
         // Skip clients without active membership
         if(!sub.active_membership)return;
         var fechaValor=null;var fechaFin=null;
