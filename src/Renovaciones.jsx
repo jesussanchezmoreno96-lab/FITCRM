@@ -341,14 +341,20 @@ export default function Renovaciones(props) {
   }
 
   function wc(w) {
-    var r = 0, p = 0, b = 0;
+    var r = 0, p = 0, b = 0, pendientesPago = 0;
+    var today = new Date(); today.setHours(0,0,0,0);
+    var isPastWeek = w.monday < thisMonday;
     w.clients.forEach(function (c) {
       var d = rd(c.nombre, w.key);
       if (d.renovacion === "renovado" || c.pagado) r++;
       else if (d.renovacion === "baja") b++;
-      else p++;
+      else {
+        p++;
+        // Si la semana ya pasó y no está renovado ni en baja → pago pendiente
+        if (isPastWeek) pendientesPago++;
+      }
     });
-    return { renovados: r, pendientes: p, bajas: b, total: w.clients.length };
+    return { renovados: r, pendientes: p, bajas: b, total: w.clients.length, pendientesPago: pendientesPago };
   }
 
   var selCounts = selWeek ? wc(selWeek) : { renovados: 0, pendientes: 0, bajas: 0, total: 0 };
@@ -386,16 +392,22 @@ export default function Renovaciones(props) {
         {weekList.map(function (w) {
           var isThis = w.monday.getTime() === thisMonday.getTime();
           var counts = wc(w);
+          var alertMark = counts.pendientesPago > 0 ? " ⚠️" + counts.pendientesPago + " pago pend." : "";
           return <option key={w.key} value={w.key}>
-            {weekShort(w.monday)}{isThis ? " ← Esta semana" : ""} ({counts.total} clientes)
+            {weekShort(w.monday)}{isThis ? " ← Esta semana" : ""} ({counts.total}){alertMark}
           </option>;
         })}
       </select>
 
-      {selWeek && <div style={{ display: "flex", gap: 16, fontSize: 14, fontWeight: 700 }}>
+      {selWeek && <div style={{ display: "flex", gap: 16, fontSize: 14, fontWeight: 700, alignItems: "center" }}>
         <span style={{ color: "#22c55e" }}>✅ {selCounts.renovados}</span>
         <span style={{ color: "#f59e0b" }}>⏳ {selCounts.pendientes}</span>
         <span style={{ color: "#ef4444" }}>🚫 {selCounts.bajas}</span>
+        {selCounts.pendientesPago > 0 && <span style={{
+          color: "#ef4444", padding: "4px 10px", borderRadius: 8,
+          background: "#ef444415", border: "1px solid #ef444440",
+          fontSize: 12
+        }}>⚠️ {selCounts.pendientesPago} pago{selCounts.pendientesPago > 1 ? "s" : ""} pendiente{selCounts.pendientesPago > 1 ? "s" : ""}</span>}
       </div>}
     </div>
 
