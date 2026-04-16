@@ -459,19 +459,19 @@ export default function Renovaciones(props) {
         var isSegundoPago = r.source === "segundo_pago";
 
         return <div key={i} style={{
-          padding: "16px 20px", borderBottom: "1px solid " + T.border,
+          padding: "8px 16px", borderBottom: "1px solid " + T.border,
           background: rowBg, opacity: isBaja ? 0.5 : 1
         }}>
           {/* Row: name + price + status */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
 
             {/* Name + price */}
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <div style={{
-                fontSize: 15, fontWeight: 700, color: T.text,
+                fontSize: 13, fontWeight: 700, color: T.text,
                 textDecoration: isBaja ? "line-through" : "none"
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 18, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.precio / 2) + "€ pagado" : isReserva ? r.importePagado + "€ reserva" : r.precio + "€"}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.precio / 2) + "€ pag." : isReserva ? r.importePagado + "€ res." : r.precio + "€"}</span>
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
               {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Pago fraccionado</span>}
@@ -527,11 +527,11 @@ export default function Renovaciones(props) {
               }}
               disabled={r.pagado}
               style={{
-                padding: "10px 16px", borderRadius: 10, fontSize: 13, fontWeight: 800,
+                padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 800,
                 outline: "none", cursor: r.pagado ? "default" : "pointer",
-                border: "2px solid " + stBorder,
+                border: "1.5px solid " + stBorder,
                 background: stBg, color: stColor,
-                minWidth: 160, flexShrink: 0
+                minWidth: 130, flexShrink: 0
               }}
             >
               <option value="pendiente">⏳ Pendiente</option>
@@ -545,11 +545,11 @@ export default function Renovaciones(props) {
             <button onClick={function () { upd(r.nombre, selWeek.key, "avisado", !data.avisado); }}
               title="Avisado"
               style={{
-                width: 36, height: 36, borderRadius: 9,
-                border: data.avisado ? "2px solid #3b82f6" : "2px solid " + T.border2,
+                width: 26, height: 26, borderRadius: 6,
+                border: data.avisado ? "1.5px solid #3b82f6" : "1.5px solid " + T.border2,
                 background: data.avisado ? "#3b82f615" : "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: 14, color: data.avisado ? "#3b82f6" : T.text3,
+                cursor: "pointer", fontSize: 11, color: data.avisado ? "#3b82f6" : T.text3,
                 padding: 0, flexShrink: 0
               }}>{data.avisado ? "✓" : "📢"}</button>
 
@@ -557,17 +557,17 @@ export default function Renovaciones(props) {
             <button onClick={function () { setMoveClient(r); setMoveTarget(""); }}
               title="Mover a otra semana"
               style={{
-                width: 36, height: 36, borderRadius: 9,
-                border: "2px solid " + T.border2,
+                width: 26, height: 26, borderRadius: 6,
+                border: "1.5px solid " + T.border2,
                 background: "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: 14, color: T.text3,
+                cursor: "pointer", fontSize: 11, color: T.text3,
                 padding: 0, flexShrink: 0
               }}>📅</button>
           </div>
 
-          {/* Notes — always visible, click to edit */}
-          <div>
+          {/* Notes — compact, click to edit */}
+          {(isEditingNote || data.notas) && <div style={{ marginTop: 4 }}>
             {isEditingNote ? (
               <div style={{ display: "flex", gap: 6 }}>
                 <input
@@ -580,31 +580,36 @@ export default function Renovaciones(props) {
                   }}
                   placeholder="Escribe una nota..."
                   style={{
-                    flex: 1, padding: "8px 12px", background: T.bg3,
-                    border: "1px solid " + T.navy, borderRadius: 8,
-                    color: T.text, fontSize: 12, outline: "none"
+                    flex: 1, padding: "5px 10px", background: T.bg3,
+                    border: "1px solid " + T.navy, borderRadius: 6,
+                    color: T.text, fontSize: 11, outline: "none"
                   }}
                 />
                 <button onClick={function () { upd(r.nombre, selWeek.key, "notas", noteTmp); setEditNote(null); }}
                   style={{
-                    padding: "8px 14px", background: T.navy, border: "none",
-                    borderRadius: 8, color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer"
+                    padding: "5px 10px", background: T.navy, border: "none",
+                    borderRadius: 6, color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer"
                   }}>OK</button>
               </div>
             ) : (
               <div onClick={function () { setEditNote(noteKey); setNoteTmp(data.notas || ""); }}
                 style={{
-                  padding: "6px 10px", borderRadius: 8, cursor: "pointer",
-                  background: data.notas ? (dk ? "rgba(99,102,241,.06)" : "#f8f9ff") : "transparent",
-                  border: data.notas ? "1px solid " + T.border : "1px dashed " + T.border2,
-                  fontSize: 12, color: data.notas ? T.text : T.text3,
-                  minHeight: 28, display: "flex", alignItems: "center", gap: 6
+                  padding: "3px 8px", borderRadius: 5, cursor: "pointer",
+                  background: dk ? "rgba(99,102,241,.06)" : "#f8f9ff",
+                  border: "1px solid " + T.border,
+                  fontSize: 10, color: T.text,
+                  display: "inline-flex", alignItems: "center", gap: 4
                 }}>
-                <span style={{ fontSize: 11 }}>📝</span>
-                {data.notas || "Añadir nota..."}
+                📝 {data.notas}
               </div>
             )}
-          </div>
+          </div>}
+          {!isEditingNote && !data.notas && <button onClick={function () { setEditNote(noteKey); setNoteTmp(""); }}
+            style={{
+              marginTop: 2, padding: "1px 6px", background: "transparent",
+              border: "none", color: T.text3, fontSize: 9, cursor: "pointer",
+              opacity: 0.5
+            }}>+ nota</button>}
         </div>;
       })}
     </div>}

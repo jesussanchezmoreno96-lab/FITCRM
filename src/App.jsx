@@ -373,7 +373,7 @@ export default function App(){
   var B={background:T.bg2,borderRadius:14,border:"1px solid "+T.border,overflow:"hidden"};
   var iS={width:"100%",padding:"9px 12px",background:T.bg3,border:"1px solid "+T.border2,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"};
 
-  if(!ld)return <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><div style={{padding:"8px 20px",background:"#394265",borderRadius:10,color:"#fff",fontSize:18,fontWeight:900,letterSpacing:1}}>time2train</div><div style={{color:"#394265",fontSize:14,fontWeight:600}}>Cargando T2Tcrm...</div></div>;
+  if(!ld)return <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}><img src="/logo.png" alt="time2train" style={{height:60,filter:dk?"brightness(0) invert(1)":"none"}}/><div style={{color:T.text3,fontSize:14,fontWeight:600}}>Cargando T2Tcrm...</div></div>;
 
   /* ═══ HOME SCREEN ═══ */  if(sec==="home") {
     // Calculate home KPIs
@@ -408,7 +408,7 @@ export default function App(){
       {/* Top bar */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,maxWidth:1200,margin:"0 auto 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <div style={{padding:"8px 18px",background:"#394265",borderRadius:10}}><span style={{color:"#fff",fontSize:18,fontWeight:900,letterSpacing:1}}>time<span style={{color:"#8ba3d9"}}>2</span>train</span></div>
+          <img src="/logo.png" alt="time2train" style={{height:42,filter:dk?"brightness(0) invert(1)":"none"}}/>
           <div>
             <div style={{fontSize:18,fontWeight:900,color:T.text}}>T2Tcrm</div>
             <div style={{fontSize:11,color:T.text3}}>Hola Jesús · {new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</div>
@@ -610,7 +610,7 @@ export default function App(){
   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
     <div style={{display:"flex",alignItems:"center",gap:10}}>
       <button onClick={function(){setSec("home");}} style={{padding:"6px 12px",background:dk?"#1e2330":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#2a2f3a":"rgba(255,255,255,.2)"),borderRadius:8,color:dk?"#94a3b8":"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>← Inicio</button>
-      <div style={{padding:"4px 14px",background:"#394265",borderRadius:8}}><span style={{color:"#fff",fontSize:14,fontWeight:900}}>time<span style={{color:"#8ba3d9"}}>2</span>train</span></div>
+      <img src="/logo.png" alt="time2train" style={{height:24,filter:"brightness(0) invert(1)"}}/>
       <span style={{fontSize:16,fontWeight:800,color:dk?"#e2e8f0":"#fff"}}>T2Tcrm</span>
     </div>
     <div style={{display:"flex",gap:8}}>
