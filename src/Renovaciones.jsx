@@ -303,6 +303,41 @@ export default function Renovaciones(props) {
     weekList.push(weekMap[key] || { monday: mon, key: key, clients: [] });
   }
 
+  // ═══ AUTO-DRAG: unpaid entries from past weeks → move to current week ═══
+  var thisWeekKey = localKey(thisMonday);
+  if (!weekMap[thisWeekKey]) weekMap[thisWeekKey] = { monday: thisMonday, key: thisWeekKey, clients: [] };
+  var thisWeekRef = weekList.find(function (w) { return w.key === thisWeekKey; });
+  if (thisWeekRef) {
+    // Check ALL past weeks for unpaid clients
+    Object.keys(weekMap).forEach(function (wk) {
+      var wMonday = new Date(wk + "T00:00:00");
+      if (isNaN(wMonday) || wMonday >= thisMonday) return; // only past weeks
+      var wData = weekMap[wk];
+      if (!wData || !wData.clients) return;
+      wData.clients.forEach(function (c) {
+        if (c.pagado) return; // already paid, skip
+        var d = rd(c.nombre, wk);
+        if (d.renovacion === "renovado" || d.renovacion === "baja") return; // manually handled
+        // Check not already in current week
+        var nameNorm = c.nombre.toLowerCase().trim();
+        var alreadyThisWeek = thisWeekRef.clients.some(function (tc) {
+          return tc.nombre.toLowerCase().trim() === nameNorm;
+        });
+        if (alreadyThisWeek) return;
+        // Drag to current week
+        thisWeekRef.clients.push({
+          nombre: c.nombre, tipo: c.tipo, precio: c.precio,
+          pagado: false, fechaPago: "",
+          renewMonday: thisMonday, fechaValor: thisMonday, fechaFin: null,
+          source: "arrastre_impago", nextBooking: c.nextBooking,
+          clientId: c.clientId, clientStatus: c.clientStatus,
+          importePagado: c.importePagado, restante: c.restante,
+          originalWeek: wk
+        });
+      });
+    });
+  }
+
   // Auto-select
   var selWeek = weekList.find(function (w) { return w.key === renWeek; });
   if (!selWeek || renWeek === "auto") {
@@ -479,6 +514,7 @@ export default function Renovaciones(props) {
               {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
               {r.source === "agotado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Bono agotado ({r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total})</span>}
               {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>⚠️ Última sesión ({r.sesiones.restantes} de {r.sesiones.total})</span>}
+              {r.source === "arrastre_impago" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚠️ Impago desde {r.originalWeek}</span>}
             </div>
 
             {/* STATUS — big select */}
