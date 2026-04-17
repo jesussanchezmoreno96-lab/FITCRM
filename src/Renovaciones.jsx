@@ -304,27 +304,29 @@ export default function Renovaciones(props) {
   }
 
   // ═══ AUTO-DRAG: unpaid entries from past weeks → move to current week ═══
+  // ONLY drag if: not paid AND not manually marked as renovado/baja in renData
   var thisWeekKey = localKey(thisMonday);
   if (!weekMap[thisWeekKey]) weekMap[thisWeekKey] = { monday: thisMonday, key: thisWeekKey, clients: [] };
   var thisWeekRef = weekList.find(function (w) { return w.key === thisWeekKey; });
   if (thisWeekRef) {
-    // Check ALL past weeks for unpaid clients
     Object.keys(weekMap).forEach(function (wk) {
       var wMonday = new Date(wk + "T00:00:00");
-      if (isNaN(wMonday) || wMonday >= thisMonday) return; // only past weeks
+      if (isNaN(wMonday) || wMonday >= thisMonday) return;
       var wData = weekMap[wk];
       if (!wData || !wData.clients) return;
       wData.clients.forEach(function (c) {
-        if (c.pagado) return; // already paid, skip
+        if (c.pagado) return;
+        // Check renData for THIS specific entry's week
         var d = rd(c.nombre, wk);
-        if (d.renovacion === "renovado" || d.renovacion === "baja") return; // manually handled
-        // Check not already in current week
+        if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva") return;
+        // Only drag "segundo_pago", "pago_restante", or "arrastre_impago" sources
+        // Do NOT drag regular bono entries — those are just unpaid in TIMP but may have paid by cash
+        if (c.source !== "segundo_pago" && c.source !== "pago_restante" && c.source !== "arrastre_impago") return;
         var nameNorm = c.nombre.toLowerCase().trim();
         var alreadyThisWeek = thisWeekRef.clients.some(function (tc) {
           return tc.nombre.toLowerCase().trim() === nameNorm;
         });
         if (alreadyThisWeek) return;
-        // Drag to current week
         thisWeekRef.clients.push({
           nombre: c.nombre, tipo: c.tipo, precio: c.precio,
           pagado: false, fechaPago: "",
@@ -332,7 +334,7 @@ export default function Renovaciones(props) {
           source: "arrastre_impago", nextBooking: c.nextBooking,
           clientId: c.clientId, clientStatus: c.clientStatus,
           importePagado: c.importePagado, restante: c.restante,
-          originalWeek: wk
+          originalWeek: c.originalWeek || wk
         });
       });
     });
