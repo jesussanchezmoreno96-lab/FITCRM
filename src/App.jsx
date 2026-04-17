@@ -235,8 +235,17 @@ export default function App(){
         if(!sub||!sub.full_name)return;
         // Only accept training bonos (whitelist)
         if(!isTrainingBono(a.caption))return;
-        // Skip clients without active membership
-        if(!sub.active_membership)return;
+        // Skip clients without active membership UNLESS they have a future bono or next booking
+        if(!sub.active_membership&&!sub.next_booking_for){
+          // Check if this autopurchase has a future fechaValor
+          if(a.available_at){
+            var checkParts=a.available_at.split("..");
+            if(checkParts.length===2){
+              var checkFv=new Date(checkParts[0].trim());
+              if(isNaN(checkFv)||checkFv<=new Date())return; // past bono with no active membership → skip
+            }else return;
+          }else return;
+        }
         var fechaValor=null;var fechaFin=null;
         if(a.available_at){
           var parts=a.available_at.split("..");
