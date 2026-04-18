@@ -284,8 +284,11 @@ export default function App(){
           if(amt<0){totalDevoluciones+=Math.abs(amt);}
           else if(p.paid_at){totalPagadoReal+=amt;if(p.payment_method)purchaseMethod=p.payment_method;}
         });
-        var deudaReal=precioTotal-totalPagadoReal;
+        // Use the HIGHEST between installments paid and purchases paid
+        var mejorPagado=Math.max(importePagado,totalPagadoReal);
+        var deudaReal=precioTotal-mejorPagado;
         if(deudaReal<0)deudaReal=0;
+        if(pagado)deudaReal=0;
         // Use purchase payment method if autopurchase doesn't have one
         var metodoFinal=a.payment_method||purchaseMethod||"";
         parsed.push({
@@ -301,7 +304,7 @@ export default function App(){
           fraccionado:esFraccionado,
           mitadPagada:mitadPagada,
           esReserva:esReserva,
-          importePagado:totalPagadoReal>0?totalPagadoReal:importePagado,
+          importePagado:mejorPagado,
           totalDevoluciones:totalDevoluciones,
           deudaReal:deudaReal,
           telefono:sub.phone||"",
