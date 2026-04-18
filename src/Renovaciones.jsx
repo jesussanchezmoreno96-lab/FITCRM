@@ -508,7 +508,8 @@ export default function Renovaciones(props) {
                 fontSize: 13, fontWeight: 700, color: T.text,
                 textDecoration: isBaja ? "line-through" : "none"
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.precio / 2) + "€ pag." : isReserva ? r.importePagado + "€ res." : r.precio + "€"}</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
+              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 {Math.round(r.importePagado)}€ pagado de {r.precio}€</span>}
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
               {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Pago fraccionado</span>}
