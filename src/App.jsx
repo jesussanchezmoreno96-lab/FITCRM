@@ -206,15 +206,19 @@ export default function App(){
   function syncBonos(){
     var autoPath="branch_buildings/"+TIMP_CENTER+"/autopurchases%3Fdate_from=2025-01-01%26date_to=2027-01-01%26page=1";
     var subsPath="branch_buildings/"+TIMP_CENTER+"/subscriptions%3Fpage=1";
+    var purchPath="branch_buildings/"+TIMP_CENTER+"/purchases%3Fdate_from=2025-01-01%26date_to=2027-01-01%26page=1";
     Promise.all([
       fetch("/api/timp?path="+autoPath).then(function(r){return r.json();}),
-      fetch("/api/timp?path="+subsPath).then(function(r){return r.json();})
+      fetch("/api/timp?path="+subsPath).then(function(r){return r.json();}),
+      fetch("/api/timp?path="+purchPath).then(function(r){return r.json();})
     ]).then(function(results){
       var autoData=results[0];
       var subsData=results[1];
+      var purchData=results[2];
       if(!autoData||!autoData.collection)return;
       var autos=autoData.collection;
       var subs=(subsData&&subsData.collection)||[];
+      var purchases=(purchData&&purchData.collection)||[];
       var parsed=[];
       // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
       var ENTRENAMIENTO_BONOS=[
@@ -272,20 +276,34 @@ export default function App(){
         }
         // Save dates in LOCAL timezone to avoid UTC day shift
         function toLocalISO(d){var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate(),h=d.getHours(),mi=d.getMinutes();return y+"-"+(m<10?"0":"")+m+"-"+(dd<10?"0":"")+dd+"T"+(h<10?"0":"")+h+":"+(mi<10?"0":"")+mi+":00";}
+        // Cross-reference with purchases to get real payment data
+        var clientPurchases=purchases.filter(function(p){return p.suscription_uuid===a.suscription_uuid;});
+        var totalPagadoReal=0;var totalDevoluciones=0;var purchaseMethod="";
+        clientPurchases.forEach(function(p){
+          var amt=parseFloat(p.final_price)||0;
+          if(amt<0){totalDevoluciones+=Math.abs(amt);}
+          else if(p.paid_at){totalPagadoReal+=amt;if(p.payment_method)purchaseMethod=p.payment_method;}
+        });
+        var deudaReal=precioTotal-totalPagadoReal;
+        if(deudaReal<0)deudaReal=0;
+        // Use purchase payment method if autopurchase doesn't have one
+        var metodoFinal=a.payment_method||purchaseMethod||"";
         parsed.push({
           nombre:sub.full_name,concepto:a.caption||"",tipoBono:a.caption||"",
           fechaValor:toLocalISO(fechaValor),
           fechaFin:fechaFin?toLocalISO(fechaFin):"",
-          precio:parseFloat(a.final_price)||0,pagado:pagado,
-          fechaPago:a.paid_at||"",formaPago:a.payment_method||"",
+          precio:precioTotal,pagado:pagado,
+          fechaPago:a.paid_at||"",formaPago:metodoFinal,
           suscriptionUuid:a.suscription_uuid||"",
           totalSesiones:0,usadas:0,sinCanjear:0,enUso:0,caducadas:0,
-          total:parseFloat(a.final_price)||0,
-          pendientePago:pagado?0:parseFloat(a.final_price)||0,
+          total:precioTotal,
+          pendientePago:deudaReal,
           fraccionado:esFraccionado,
           mitadPagada:mitadPagada,
           esReserva:esReserva,
-          importePagado:importePagado,
+          importePagado:totalPagadoReal>0?totalPagadoReal:importePagado,
+          totalDevoluciones:totalDevoluciones,
+          deudaReal:deudaReal,
           telefono:sub.phone||"",
           email:sub.email||"",
           nextBooking:sub.next_booking_for||""
