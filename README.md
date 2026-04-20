@@ -38,3 +38,4 @@ npm run build
 ```
 
 Genera los archivos en la carpeta `dist/` listos para subir a cualquier hosting.
+<!-- v63 rebuild -->
