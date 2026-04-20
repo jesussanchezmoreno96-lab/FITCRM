@@ -3,6 +3,24 @@ import { useState } from "react";
 var DAYS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
 var MONTHS_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
+// ══════════════════════════════════════════════════════════════════════
+//  HELPERS de matching seguro (evitan falsos positivos tipo Luis ↔ Luisa)
+// ══════════════════════════════════════════════════════════════════════
+function normName(s){
+  if(!s)return "";
+  return String(s).toLowerCase().trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\s+/g," ");
+}
+function matchesName(a,b){
+  var na=normName(a),nb=normName(b);
+  if(!na||!nb)return false;
+  if(na===nb)return true;
+  var wa=na.split(" "),wb=nb.split(" ");
+  if(wa.length<2||wb.length<2)return false;
+  return wa[0]===wb[0]&&wa[1]===wb[1];
+}
+
 function getMonday(d) {
   var date = new Date(d);
   var day = date.getDay();
@@ -112,14 +130,7 @@ export default function Renovaciones(props) {
   var entries = [];
   Object.values(bySub).forEach(function (client) {
     var sorted = client.bonos.slice().sort(function (a, b) { return a.fechaValor - b.fechaValor; });
-    var crmClient = clients.find(function (cl) {
-      var cn = (cl.name || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      var bn = client.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (cn === bn) return true;
-      var wa = cn.split(" "), wb = bn.split(" ");
-      if (wa.length >= 2 && wb.length >= 2 && wa[0] === wb[0] && wa[1] === wb[1]) return true;
-      return false;
-    });
+    var crmClient = clients.find(function (cl) { return matchesName(cl.name, client.nombre); });
     var nextBooking = crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null;
     var addedWeeks = {};
 
@@ -175,28 +186,22 @@ export default function Renovaciones(props) {
       // Skip if more than 1 session remaining
       if (restantes > 1) return;
 
-      // Check if this client already has an entry this week
-      var nameNorm = cx.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      // Check if this client already has an entry this week (match seguro)
       var alreadyThisWeek = entries.some(function (e) {
-        var en = e.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return (en === nameNorm || en.indexOf(nameNorm) >= 0 || nameNorm.indexOf(en) >= 0) &&
+        return matchesName(e.nombre, cx.nombre) &&
           e.renewMonday.getTime() === thisMonday.getTime();
       });
       if (alreadyThisWeek) return;
 
       // Skip if client already has a NEWER paid bono from API (already renewed)
       var hasNewerPaidBono = allBonos.some(function (b) {
-        var bn = b.nombre.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return (bn === nameNorm || bn.indexOf(nameNorm) >= 0 || nameNorm.indexOf(bn) >= 0) &&
+        return matchesName(b.nombre, cx.nombre) &&
           b.pagado && b.fechaValor && b.fechaValor >= thisMonday;
       });
       if (hasNewerPaidBono) return;
 
-      // Find matching CRM client
-      var crmClient = clients.find(function (cl) {
-        var cn = (cl.name || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return cn === nameNorm || cn.indexOf(nameNorm) >= 0 || nameNorm.indexOf(cn) >= 0;
-      });
+      // Find matching CRM client (match seguro)
+      var crmClient = clients.find(function (cl) { return matchesName(cl.name, cx.nombre); });
 
       var isAgotado = restantes <= 0;
       var isUltima = restantes === 1;
@@ -304,7 +309,7 @@ export default function Renovaciones(props) {
   }
 
   // ═══ AUTO-DRAG: unpaid entries from past weeks → move to current week ═══
-  // ONLY drag if: not paid AND not manually marked as renovado/baja in renData
+  // ONLY drag if: not paid AND not manually marked as renovado/baja/mitad/reserva in renData
   var thisWeekKey = localKey(thisMonday);
   if (!weekMap[thisWeekKey]) weekMap[thisWeekKey] = { monday: thisMonday, key: thisWeekKey, clients: [] };
   var thisWeekRef = weekList.find(function (w) { return w.key === thisWeekKey; });
@@ -322,10 +327,8 @@ export default function Renovaciones(props) {
         // Only drag "segundo_pago", "pago_restante", or "arrastre_impago" sources
         // Do NOT drag regular bono entries — those are just unpaid in TIMP but may have paid by cash
         if (c.source !== "segundo_pago" && c.source !== "pago_restante" && c.source !== "arrastre_impago") return;
-        var nameNorm = c.nombre.toLowerCase().trim();
-        var alreadyThisWeek = thisWeekRef.clients.some(function (tc) {
-          return tc.nombre.toLowerCase().trim() === nameNorm;
-        });
+        // Match seguro: ya hay otra fila del mismo cliente esta semana (cualquier source)
+        var alreadyThisWeek = thisWeekRef.clients.some(function (tc) { return matchesName(tc.nombre, c.nombre); });
         if (alreadyThisWeek) return;
         thisWeekRef.clients.push({
           nombre: c.nombre, tipo: c.tipo, precio: c.precio,

@@ -93,28 +93,112 @@ export default function App(){
   function saveFisio(f){dbSave("fisio_reports",f.id,f).catch(function(){});}
   function deleteFisio(id){dbDel("fisio_reports",id).catch(function(){});}
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  HELPER: saveRenDataAtomic — actualiza estado Y persiste el MISMO snapshot.
+  //  Antes: setRenData(prev=>...) + dbSave(renData) → renData stale = race.
+  //  Ahora: calculamos el next una sola vez y lo usamos para ambos.
+  // ══════════════════════════════════════════════════════════════════════
+  function saveRenDataAtomic(updater){
+    setRenData(function(prev){
+      var next=updater(prev);
+      // Persistir con el snapshot que acabamos de calcular
+      dbSave("bonos_timp","renovacion_data",next).catch(function(err){
+        console.error("[saveRenDataAtomic] error persistiendo:",err);
+      });
+      return next;
+    });
+  }
+  function changeRenovacion(clientName,weekKey,field,value){
+    var k=clientName.toLowerCase().trim()+"__"+weekKey;
+    saveRenDataAtomic(function(prev){
+      var n=Object.assign({},prev);
+      n[k]=Object.assign({},n[k]||{});
+      n[k][field]=value;
+      return n;
+    });
+  }
+  function moveRenovacion(clientName,fromWeek,toWeek,notas){
+    var fk=clientName.toLowerCase().trim()+"__"+fromWeek;
+    var tk=clientName.toLowerCase().trim()+"__"+toWeek;
+    saveRenDataAtomic(function(prev){
+      var n=Object.assign({},prev);
+      n[fk]=Object.assign({},n[fk]||{},{renovacion:"renovado"});
+      n[tk]=Object.assign({},n[tk]||{},{notas:notas||"Movido desde semana "+fromWeek,segundoPago:true,clientName:clientName});
+      return n;
+    });
+  }
+
   var TIMP_CENTER="ebb9a2c0-782e-4d77-b5eb-17d18a1f8949";
   function timpFetch(endpoint){return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/"+endpoint).then(function(r){return r.json();});}
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  HELPER: Normalizar nombre (quitar tildes, lowercase, trim, colapsar espacios)
+  // ══════════════════════════════════════════════════════════════════════
+  function normName(s){
+    if(!s)return "";
+    return String(s).toLowerCase().trim()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+      .replace(/\s+/g," ");
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  HELPER: Match de nombres SEGURO (exige nombre + 1er apellido)
+  //  Reemplaza el antiguo matching por indexOf que daba falsos positivos
+  //  ("Luis" ↔ "Luisa", "Mari" ↔ "Mari Carmen", etc.)
+  // ══════════════════════════════════════════════════════════════════════
+  function matchesName(a,b){
+    var na=normName(a),nb=normName(b);
+    if(!na||!nb)return false;
+    if(na===nb)return true;
+    var wa=na.split(" "),wb=nb.split(" ");
+    // Exigir al menos 2 palabras coincidentes (nombre + 1er apellido)
+    if(wa.length<2||wb.length<2)return false;
+    return wa[0]===wb[0]&&wa[1]===wb[1];
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  HELPER: Paginación TIMP — recorre todas las páginas
+  //  TIMP devuelve { collection: [...], ... } por página.
+  //  Se detiene cuando: collection vacío, sin cambios, o hard cap.
+  // ══════════════════════════════════════════════════════════════════════
+  function fetchAllPages(basePath,qs){
+    var MAX_PAGES=80; // hard cap de seguridad (767 clientes / 25 ~ 31 páginas)
+    var results=[];
+    function getOne(page){
+      var sep=qs?"%26":"%3F";
+      var suffix=qs?qs+sep+"page="+page:"%3Fpage="+page;
+      return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/"+basePath+suffix)
+        .then(function(r){return r.json();});
+    }
+    function loop(page){
+      if(page>MAX_PAGES){console.warn("[TIMP] MAX_PAGES alcanzado en "+basePath);return results;}
+      return getOne(page).then(function(data){
+        if(!data||!data.collection||data.collection.length===0)return results;
+        results=results.concat(data.collection);
+        // Si la página devuelve menos de lo normal (default 25), asumimos fin
+        if(data.collection.length<25)return results;
+        return loop(page+1);
+      }).catch(function(err){
+        console.error("[TIMP] Error en "+basePath+" page "+page+":",err);
+        return results;
+      });
+    }
+    return loop(1);
+  }
+
   function syncTimp(){
     setTimpSyncing(true);
-    timpFetch("subscriptions?page=1").then(function(data){
-      if(!data||!data.collection){setTimpSyncing(false);return;}
-      var subs=data.collection;
+    fetchAllPages("subscriptions","").then(function(subs){
+      if(!subs||subs.length===0){setTimpSyncing(false);return;}
+      console.log("[syncTimp] Cargadas "+subs.length+" subscriptions de TIMP");
       setTimpData(subs);
       setTimpLast(new Date().toLocaleString("es-ES"));
       var now=new Date();
       // Update CRM clients with TIMP data
       setCl(function(prev){
         var updated=prev.map(function(c){
-          // Match by name (fuzzy)
-          var match=subs.find(function(s){
-            return s.full_name&&c.name&&(
-              s.full_name.toLowerCase()===c.name.toLowerCase()||
-              s.full_name.toLowerCase().indexOf(c.name.toLowerCase())>=0||
-              c.name.toLowerCase().indexOf(s.full_name.toLowerCase())>=0
-            );
-          });
+          // Match seguro por nombre + 1er apellido (antes: indexOf = falsos positivos)
+          var match=subs.find(function(s){return matchesName(s.full_name,c.name);});
           if(match){
             var upd=Object.assign({},c);
             upd.timpUuid=match.uuid;
@@ -143,11 +227,23 @@ export default function App(){
               upd.timpAlert="Alta automática desde TIMP";
               upd.timpAltaDate=now.toISOString();
             }
-            // BAJA: sin bono activo NI reserva NI bono futuro NI bonos de entrenamiento
-            else if((!tieneBono&&!tienBonoFuturo||!tieneEntrenamiento)&&c.status==="activo"){
+            // BAJA: solo damos baja si YA tenemos bonos cargados (evita bajas fantasma
+            // si syncTimp corre antes que syncBonos). Condición: sin bono activo Y sin
+            // bono futuro Y sin bonos de entrenamiento (con paréntesis explícitos).
+            else if(bonos.length>0 && !tieneBono && !tienBonoFuturo && !tieneEntrenamiento && c.status==="activo"){
               upd.status="baja";
-              upd.timpAlert=tieneEntrenamiento?"Baja automática (sin bono activo en TIMP)":"Solo tiene bonos de fisio/nutrición";
-              upd.motivoBaja=tieneEntrenamiento?"Sin bono activo en TIMP":"Solo fisio/nutrición";
+              upd.timpAlert="Baja automática (sin bono activo ni de entrenamiento en TIMP)";
+              upd.motivoBaja="Sin bono activo en TIMP";
+            }
+            // Tiene entrenamiento pero ni bono activo ni futuro → baja
+            else if(bonos.length>0 && !tieneBono && !tienBonoFuturo && tieneEntrenamiento && c.status==="activo"){
+              upd.status="baja";
+              upd.timpAlert="Baja automática (sin bono activo en TIMP)";
+              upd.motivoBaja="Sin bono activo en TIMP";
+            }
+            // Solo tiene fisio/nutrición, nunca entrenamiento → marcar pero NO dar de baja automáticamente
+            else if(bonos.length>0 && (tieneBono||tienBonoFuturo) && !tieneEntrenamiento && c.status==="activo"){
+              upd.timpAlert="Solo tiene bonos de fisio/nutrición";
             }
             // Activo en ambos, todo OK
             else if((tieneBono||tienBonoFuturo)&&tieneEntrenamiento&&c.status==="activo"){
@@ -160,7 +256,6 @@ export default function App(){
         // Save updated clients
         updated.forEach(function(c){if(c.timpUuid)saveClient(c);});
         // Auto-create new clients from TIMP that are active but not in CRM
-        var crmNames=updated.map(function(c){return(c.name||"").toLowerCase().trim();});
         var newFromTimp=subs.filter(function(s){
           if(!s.full_name)return false;
           var tieneBono=s.active_membership||!!s.next_booking_for;
@@ -172,8 +267,8 @@ export default function App(){
           var haComprado=bonos.some(function(b){return b.suscriptionUuid===s.uuid;});
           if(!haComprado)return false;
           if(!tieneBono&&!tieneBonoFuturo)return false;
-          var sn=s.full_name.toLowerCase().trim();
-          return!crmNames.some(function(cn){return cn===sn||cn.indexOf(sn)>=0||sn.indexOf(cn)>=0;});
+          // Match seguro: no dar de alta si ya existe un cliente con el mismo nombre+apellido
+          return !updated.some(function(c){return matchesName(c.name,s.full_name);});
         });
         newFromTimp.forEach(function(s){
           var nc={
@@ -200,26 +295,24 @@ export default function App(){
         return updated;
       });
       setTimpSyncing(false);
-    }).catch(function(){setTimpSyncing(false);});
+    }).catch(function(err){console.error("[syncTimp] Error:",err);setTimpSyncing(false);});
   }
 
   // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
   function syncBonos(){
-    var autoPath="branch_buildings/"+TIMP_CENTER+"/autopurchases%3Fdate_from=2025-01-01%26date_to=2027-01-01%26page=1";
-    var subsPath="branch_buildings/"+TIMP_CENTER+"/subscriptions%3Fpage=1";
-    var purchPath="branch_buildings/"+TIMP_CENTER+"/purchases%3Fdate_from=2025-01-01%26date_to=2027-01-01%26page=1";
+    // Paginación en las 3 llamadas — antes solo se leía page=1 (25 registros)
+    var autoQs="%3Fdate_from=2025-01-01%26date_to=2027-01-01";
+    var purchQs="%3Fdate_from=2025-01-01%26date_to=2027-01-01";
     Promise.all([
-      fetch("/api/timp?path="+autoPath).then(function(r){return r.json();}),
-      fetch("/api/timp?path="+subsPath).then(function(r){return r.json();}),
-      fetch("/api/timp?path="+purchPath).then(function(r){return r.json();})
+      fetchAllPages("autopurchases",autoQs),
+      fetchAllPages("subscriptions",""),
+      fetchAllPages("purchases",purchQs)
     ]).then(function(results){
-      var autoData=results[0];
-      var subsData=results[1];
-      var purchData=results[2];
-      if(!autoData||!autoData.collection)return;
-      var autos=autoData.collection;
-      var subs=(subsData&&subsData.collection)||[];
-      var purchases=(purchData&&purchData.collection)||[];
+      var autos=results[0]||[];
+      var subs=results[1]||[];
+      var purchases=results[2]||[];
+      if(autos.length===0){console.warn("[syncBonos] Sin autopurchases de TIMP");return;}
+      console.log("[syncBonos] Cargados "+autos.length+" autopurchases, "+subs.length+" subs, "+purchases.length+" purchases");
       var parsed=[];
       // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
       var ENTRENAMIENTO_BONOS=[
@@ -240,16 +333,23 @@ export default function App(){
         if(!sub||!sub.full_name)return;
         // Only accept training bonos (whitelist)
         if(!isTrainingBono(a.caption))return;
-        // Skip clients without active membership UNLESS they have a future bono or next booking
+        // Skip clients without active membership UNLESS they have:
+        //   - next_booking_for (reserva futura)
+        //   - bono futuro (available_at empieza después de hoy)
+        //   - bono recién vencido (fechaFin dentro de las últimas 4 semanas → aparece en renovaciones)
         if(!sub.active_membership&&!sub.next_booking_for){
-          // Check if this autopurchase has a future fechaValor
-          if(a.available_at){
-            var checkParts=a.available_at.split("..");
-            if(checkParts.length===2){
-              var checkFv=new Date(checkParts[0].trim());
-              if(isNaN(checkFv)||checkFv<=new Date())return; // past bono with no active membership → skip
-            }else return;
-          }else return;
+          if(!a.available_at)return;
+          var checkParts=a.available_at.split("..");
+          if(checkParts.length!==2)return;
+          var checkFv=new Date(checkParts[0].trim());
+          var checkFf=new Date(checkParts[1].trim());
+          var now=new Date();
+          var cutoff=new Date();cutoff.setDate(cutoff.getDate()-28); // hace 4 semanas
+          if(isNaN(checkFv))return;
+          // Pasa si: el bono empieza en el futuro OR acabó hace menos de 4 semanas
+          var empiezaFuturo=checkFv>now;
+          var acabadoReciente=!isNaN(checkFf)&&checkFf>=cutoff;
+          if(!empiezaFuturo&&!acabadoReciente)return;
         }
         var fechaValor=null;var fechaFin=null;
         if(a.available_at){
@@ -265,9 +365,13 @@ export default function App(){
         var importePagado=0;
         var precioTotal=parseFloat(a.final_price)||0;
         if(esFraccionado&&a.installments&&a.installments.length>0){
-          a.installments.forEach(function(inst){if(inst.paid)importePagado+=parseFloat(inst.paid_amount)||0;});
-          if(importePagado>0&&!pagado){
+          var instPaidCount=0;
+          a.installments.forEach(function(inst){
+            if(inst.paid){importePagado+=parseFloat(inst.paid_amount)||0;instPaidCount++;}
+          });
+          if(importePagado>0&&!pagado&&precioTotal>0){
             // <= 30% del total → reserva; > 30% → mitad pagada
+            // Guardia: si precioTotal es 0 (dato malo TIMP), no clasificar
             if(importePagado<=precioTotal*0.3){
               esReserva=true;
             }else{
@@ -314,17 +418,25 @@ export default function App(){
         });
       });
       console.log("[syncBonos] Parsed "+parsed.length+" bonos from API");
-      setBonos(parsed);
-      dbSave("bonos_timp","cuotas_vigentes",parsed).catch(function(){});
+      // ── Deduplicación: mismo suscriptionUuid + misma fechaValor → quedarnos con el pagado o el más reciente
+      var dedupeMap={};
+      parsed.forEach(function(b){
+        var key=(b.suscriptionUuid||b.nombre)+"__"+(b.fechaValor||"");
+        if(!dedupeMap[key]){dedupeMap[key]=b;return;}
+        // Si ya había uno, priorizar el pagado; si ambos pagados, el de precio mayor
+        var prev=dedupeMap[key];
+        if(b.pagado&&!prev.pagado)dedupeMap[key]=b;
+        else if(b.pagado===prev.pagado&&b.precio>prev.precio)dedupeMap[key]=b;
+      });
+      var deduped=Object.values(dedupeMap);
+      if(deduped.length<parsed.length)console.log("[syncBonos] Deduplicados: "+(parsed.length-deduped.length)+" duplicados eliminados");
+      setBonos(deduped);
+      dbSave("bonos_timp","cuotas_vigentes",deduped).catch(function(){});
     }).catch(function(err){console.error("[syncBonos] Error:",err);});
   }
 
-  // Auto-sync bonos: when TIMP syncs OR when app loads with clients
-  useEffect(function(){
-    if(timpData&&timpData.length>0){syncBonos();}
-  },[timpData]);
-
-  // Also sync bonos on initial load (doesn't need timpData anymore since it fetches subs itself)
+  // Auto-sync bonos: UN SOLO useEffect — dispara al cargar la app. syncTimp se encarga de subs.
+  // Antes había DOS useEffects (en ld y en timpData) que hacían doble fetch a TIMP al arrancar.
   useEffect(function(){
     if(ld){syncBonos();}
   },[ld]);
@@ -467,8 +579,8 @@ export default function App(){
             createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
             createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
             changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
-            changeRenovacion:function(clientName,weekKey,field,value){var k=clientName.toLowerCase().trim()+"__"+weekKey;setRenData(function(prev){var n=Object.assign({},prev);n[k]=Object.assign({},n[k]||{});n[k][field]=value;return n;});var updated=Object.assign({},renData);var kk=clientName.toLowerCase().trim()+"__"+weekKey;updated[kk]=Object.assign({},updated[kk]||{});updated[kk][field]=value;dbSave("bonos_timp","renovacion_data",updated).catch(function(){});},
-            moveRenovacion:function(clientName,fromWeek,toWeek,notas){var fk=clientName.toLowerCase().trim()+"__"+fromWeek;var tk=clientName.toLowerCase().trim()+"__"+toWeek;setRenData(function(prev){var n=Object.assign({},prev);n[fk]=Object.assign({},n[fk]||{},{ renovacion:"renovado" });n[tk]=Object.assign({},n[tk]||{},{ notas:notas||"Movido",segundoPago:true,clientName:clientName });return n;});var updated=Object.assign({},renData);updated[fk]=Object.assign({},updated[fk]||{},{ renovacion:"renovado" });updated[tk]=Object.assign({},updated[tk]||{},{ notas:notas||"Movido",segundoPago:true,clientName:clientName });dbSave("bonos_timp","renovacion_data",updated).catch(function(){});}
+            changeRenovacion:changeRenovacion,
+            moveRenovacion:moveRenovacion
           }}/>
         </div>}
 
@@ -861,8 +973,7 @@ export default function App(){
     }}
     onChangeStatus={function(name,status){
       sv(function(p){return p.map(function(c){
-        return c.name.toLowerCase().indexOf(name.toLowerCase())>=0
-          ? Object.assign({},c,{status:status}) : c;
+        return matchesName(c.name,name) ? Object.assign({},c,{status:status}) : c;
       });});
     }}
     importCuotas={importCuotas}
@@ -902,26 +1013,8 @@ export default function App(){
     createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
     createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
     changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
-    changeRenovacion:function(clientName,weekKey,field,value){
-      var k=clientName.toLowerCase().trim()+"__"+weekKey;
-      setRenData(function(prev){var n=Object.assign({},prev);n[k]=Object.assign({},n[k]||{});n[k][field]=value;return n;});
-      var updated=Object.assign({},renData);var kk=clientName.toLowerCase().trim()+"__"+weekKey;updated[kk]=Object.assign({},updated[kk]||{});updated[kk][field]=value;
-      dbSave("bonos_timp","renovacion_data",updated).catch(function(){});
-    },
-    moveRenovacion:function(clientName,fromWeek,toWeek,notas){
-      var fk=clientName.toLowerCase().trim()+"__"+fromWeek;
-      var tk=clientName.toLowerCase().trim()+"__"+toWeek;
-      setRenData(function(prev){
-        var n=Object.assign({},prev);
-        n[fk]=Object.assign({},n[fk]||{},{ renovacion:"renovado" });
-        n[tk]=Object.assign({},n[tk]||{},{ notas:notas||"Movido desde semana "+fromWeek, segundoPago:true, clientName:clientName });
-        return n;
-      });
-      var updated=Object.assign({},renData);
-      updated[fk]=Object.assign({},updated[fk]||{},{ renovacion:"renovado" });
-      updated[tk]=Object.assign({},updated[tk]||{},{ notas:notas||"Movido desde semana "+fromWeek, segundoPago:true, clientName:clientName });
-      dbSave("bonos_timp","renovacion_data",updated).catch(function(){});
-    }
+    changeRenovacion:changeRenovacion,
+    moveRenovacion:moveRenovacion
   }}/>
 
   </div>);
