@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-// v63
 import Horarios from "./Horarios.jsx";
 import AIAssistant from "./AIAssistant.jsx";
 import Dashboard from "./Dashboard.jsx";
@@ -33,6 +32,7 @@ export default function App(){
   var fs_=_("todos"),fs=fs_[0],setFs=fs_[1];
   var sel_=_(null),sel=sel_[0],setSel=sel_[1];
   var sA_=_(false),sA=sA_[0],setSA=sA_[1];
+  var homeAI_=_(false),homeAI=homeAI_[0],setHomeAI=homeAI_[1];
   var sE_=_(false),sE=sE_[0],setSE=sE_[1];
   var fm_=_({}),fm=fm_[0],setFm=fm_[1];
   var ef_=_({ei:0,date:"",series:"",weight:"",reps:"",notes:""}),ef=ef_[0],setEf=ef_[1];
@@ -450,21 +450,27 @@ export default function App(){
 
       <div style={{maxWidth:1100,margin:"0 auto"}}>
         {/* ═══ AI ASSISTANT BAR ═══ */}
-        <div style={{background:T.bg2,borderRadius:16,border:"1px solid "+T.border,padding:"16px 20px",marginBottom:24,display:"flex",alignItems:"center",gap:14}}>
+        <div style={{background:T.bg2,borderRadius:16,border:"1px solid "+T.border,padding:"16px 20px",marginBottom:24,display:"flex",alignItems:"center",gap:14,cursor:"pointer"}} onClick={function(){setHomeAI(true);}}>
           <span style={{fontSize:28}}>🤖</span>
           <div style={{flex:1}}>
-            <input
-              placeholder="Pregúntame lo que quieras... (ej: ¿Quién renueva esta semana? / Info de Pablo Martínez)"
-              onFocus={function(){setSec("entrenamiento");setMv("clientes");setTimeout(function(){var btn=document.querySelector('[style*=\"position: fixed\"][style*=\"bottom: 20\"]');if(btn)btn.click();},300);}}
-              style={{
-                width:"100%",padding:"12px 16px",background:T.bg3,border:"1px solid "+T.border2,
-                borderRadius:12,color:T.text,fontSize:14,outline:"none",boxSizing:"border-box",
-                cursor:"pointer"
-              }}
-              readOnly
-            />
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Asistente T2T</div>
+            <div style={{fontSize:11,color:T.text3}}>Pregúntame lo que quieras sobre el CRM...</div>
           </div>
+          <span style={{fontSize:16,color:T.text3}}>›</span>
         </div>
+
+        {/* AI Chat inline */}
+        {homeAI&&<div style={{marginBottom:24}}>
+          <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} inline={true} onClose={function(){setHomeAI(false);}} actions={{
+            navigate:function(section,subview){setSec(section);if(subview)setMv(subview);setHomeAI(false);},
+            selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");setHomeAI(false);},
+            createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
+            createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
+            changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
+            changeRenovacion:function(clientName,weekKey,field,value){var k=clientName.toLowerCase().trim()+"__"+weekKey;setRenData(function(prev){var n=Object.assign({},prev);n[k]=Object.assign({},n[k]||{});n[k][field]=value;return n;});var updated=Object.assign({},renData);var kk=clientName.toLowerCase().trim()+"__"+weekKey;updated[kk]=Object.assign({},updated[kk]||{});updated[kk][field]=value;dbSave("bonos_timp","renovacion_data",updated).catch(function(){});},
+            moveRenovacion:function(clientName,fromWeek,toWeek,notas){var fk=clientName.toLowerCase().trim()+"__"+fromWeek;var tk=clientName.toLowerCase().trim()+"__"+toWeek;setRenData(function(prev){var n=Object.assign({},prev);n[fk]=Object.assign({},n[fk]||{},{ renovacion:"renovado" });n[tk]=Object.assign({},n[tk]||{},{ notas:notas||"Movido",segundoPago:true,clientName:clientName });return n;});var updated=Object.assign({},renData);updated[fk]=Object.assign({},updated[fk]||{},{ renovacion:"renovado" });updated[tk]=Object.assign({},updated[tk]||{},{ notas:notas||"Movido",segundoPago:true,clientName:clientName });dbSave("bonos_timp","renovacion_data",updated).catch(function(){});}
+          }}/>
+        </div>}
 
         {/* ═══ 3 MÓDULOS PRINCIPALES ═══ */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:24}}>
@@ -920,4 +926,3 @@ export default function App(){
 
   </div>);
 }
-  

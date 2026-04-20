@@ -254,17 +254,22 @@ export default function AIAssistant(props){
     setLoading(false);
   }
 
+  var isInline=props.inline;
+  var onClose=props.onClose;
+
   var btnStyle={position:"fixed",bottom:20,right:20,width:56,height:56,borderRadius:28,background:"linear-gradient(135deg,#394265,#4a5580)",border:"none",color:"#fff",fontSize:24,cursor:"pointer",boxShadow:"0 4px 20px rgba(57,66,101,.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999};
 
-  if(!open)return<button onClick={function(){setOpen(true);}} style={btnStyle}>🤖</button>;
+  if(!isInline&&!open)return<button onClick={function(){setOpen(true);}} style={btnStyle}>🤖</button>;
 
-  return(<div style={{position:"fixed",bottom:20,right:20,width:380,maxWidth:"calc(100vw - 40px)",height:520,maxHeight:"calc(100vh - 40px)",background:T.bg2,borderRadius:16,border:"1px solid "+T.border,boxShadow:"0 8px 32px rgba(0,0,0,.3)",display:"flex",flexDirection:"column",zIndex:1000,overflow:"hidden"}}>
+  var containerStyle=isInline?{background:T.bg2,borderRadius:16,border:"1px solid "+T.border,display:"flex",flexDirection:"column",overflow:"hidden",maxHeight:500}:{position:"fixed",bottom:20,right:20,width:380,maxWidth:"calc(100vw - 40px)",height:520,maxHeight:"calc(100vh - 40px)",background:T.bg2,borderRadius:16,border:"1px solid "+T.border,boxShadow:"0 8px 32px rgba(0,0,0,.3)",display:"flex",flexDirection:"column",zIndex:1000,overflow:"hidden"};
+
+  return(<div style={containerStyle}>
     <div style={{padding:"14px 16px",background:"#394265",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <span style={{fontSize:22}}>🤖</span>
         <div><div style={{fontSize:14,fontWeight:700,color:"#fff"}}>Asistente T2T</div><div style={{fontSize:10,color:"rgba(255,255,255,.6)"}}>Acceso total al CRM</div></div>
       </div>
-      <button onClick={function(){setOpen(false);}} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:16}}>✕</button>
+      <button onClick={function(){if(isInline&&onClose)onClose();else setOpen(false);}} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:"#fff",fontSize:16}}>✕</button>
     </div>
     
     <div style={{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:8}}>
