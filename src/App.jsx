@@ -209,6 +209,10 @@ export default function App(){
             upd.timpEmail=match.email;
             upd.timpNif=match.nif;
             upd.timpAddress=match.address;
+            // Auto-rellenar tarjeta guardada si alguna vez pagó in-app.
+            // Solo enciende el flag — nunca lo apaga (respeta marcados manuales).
+            var algunInapp=bonos.some(function(b){return b.suscriptionUuid===match.uuid&&b.formaPago==="inapp";});
+            if(algunInapp&&!c.timpHasCard)upd.timpHasCard=true;
             // Cliente con bono = active_membership OR tiene reserva futura
             var tieneBono=match.active_membership||!!match.next_booking_for;
             // Check if client has a future autopurchase (bono con fecha de valor adelantada)
@@ -984,6 +988,12 @@ export default function App(){
     dk={dk}
     bonos={bonos}
     clients={cl}
+    onToggleCard={function(clientName,value){
+      // Marca/desmarca manualmente timpHasCard del cliente y persiste
+      sv(function(p){return p.map(function(c){
+        return matchesName(c.name,clientName) ? Object.assign({},c,{timpHasCard:value}) : c;
+      });});
+    }}
   />}
 
   {mv==="cancelaciones"&&<Cancelaciones

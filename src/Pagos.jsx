@@ -21,11 +21,26 @@ function fmtDate(d) {
   catch (e) { return ""; }
 }
 
+// Normalización y match seguro de nombres (evita Luis ↔ Luisa)
+function normName(s){
+  if(!s)return "";
+  return String(s).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ");
+}
+function matchesName(a,b){
+  var na=normName(a),nb=normName(b);
+  if(!na||!nb)return false;
+  if(na===nb)return true;
+  var wa=na.split(" "),wb=nb.split(" ");
+  if(wa.length<2||wb.length<2)return false;
+  return wa[0]===wb[0]&&wa[1]===wb[1];
+}
+
 export default function Pagos(props) {
   var T = props.theme;
   var dk = props.dk;
   var bonos = props.bonos || [];
   var clients = props.clients || [];
+  var onToggleCard = props.onToggleCard; // (clientName, nuevoValor) => void
 
   var _ = useState;
   var filtro_ = _("todos"), filtro = filtro_[0], setFiltro = filtro_[1];
@@ -115,9 +130,11 @@ export default function Pagos(props) {
     byMethod[m].total += p.pendiente;
   });
 
-  // ═══ ALL ACTIVE CLIENTS WITH LAST PAYMENT METHOD (for In-App migration) ═══
+  // ═══ MIGRACIÓN IN-APP ═══
+  // Regla autoritativa: "tiene tarjeta guardada" = flag manual del cliente (timpHasCard).
+  // Se pre-rellena automáticamente si el cliente tiene algún bono in-app histórico
+  // (ver App.jsx → syncTimp). Se puede marcar/desmarcar a mano desde esta pantalla.
   var clientMethodMap = {};
-  // Get latest payment method per client from all bonos
   bonos.forEach(function (b) {
     var caption = (b.tipoBono || b.concepto || "").toLowerCase();
     var isEntrenamiento = caption.includes("time") || caption.includes("partner") ||
@@ -128,24 +145,32 @@ export default function Pagos(props) {
     if (!nombre) return;
     var metodo = b.formaPago || "sin método";
     var fv = b.fechaValor || "";
-    // Keep the most recent one
-    if (!clientMethodMap[nombre] || fv > clientMethodMap[nombre].fechaValor) {
-      clientMethodMap[nombre] = { nombre: nombre, metodo: metodo, bono: b.tipoBono || b.concepto || "", fechaValor: fv };
+    if (!clientMethodMap[nombre]) {
+      clientMethodMap[nombre] = {
+        nombre: nombre,
+        metodo: metodo,
+        bono: b.tipoBono || b.concepto || "",
+        fechaValor: fv
+      };
+    } else if (fv > clientMethodMap[nombre].fechaValor) {
+      clientMethodMap[nombre].metodo = metodo;
+      clientMethodMap[nombre].bono = b.tipoBono || b.concepto || "";
+      clientMethodMap[nombre].fechaValor = fv;
     }
   });
+  // Cruzamos con el CRM para leer el flag manual timpHasCard
+  Object.values(clientMethodMap).forEach(function (c) {
+    var crm = clients.find(function (cl) { return matchesName(cl.name, c.nombre); });
+    c.hasCard = !!(crm && crm.timpHasCard);
+  });
+  function hasStoredCard(c) { return !!c.hasCard; }
   var allClients = Object.values(clientMethodMap).sort(function (a, b) {
-    // In-app + tarjeta guardada primero (verde), resto (naranja)
-    var aReady = isReadyForInApp(a.metodo) ? 0 : 1;
-    var bReady = isReadyForInApp(b.metodo) ? 0 : 1;
+    var aReady = hasStoredCard(a) ? 0 : 1;
+    var bReady = hasStoredCard(b) ? 0 : 1;
     if (aReady !== bReady) return aReady - bReady;
     return a.nombre.localeCompare(b.nombre);
   });
-  // "Listo in-app" = inapp real O tarjeta guardada (credit_card / debit)
-  // Con tarjeta guardada, Jesús puede lanzar el cobro in-app directamente.
-  function isReadyForInApp(m) {
-    return m === "inapp" || m === "credit_card" || m === "debit";
-  }
-  var inappCount = allClients.filter(function (c) { return isReadyForInApp(c.metodo); }).length;
+  var inappCount = allClients.filter(hasStoredCard).length;
   var filteredMig = allClients;
   if (buscarMig) {
     var qm = buscarMig.toLowerCase();
@@ -170,8 +195,8 @@ export default function Pagos(props) {
         padding: "16px 20px", marginBottom: 16
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-          <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 Listos in-app: {inappCount}</span>
-          <span style={{ color: "#f59e0b", fontWeight: 700 }}>⚠️ Otros: {allClients.length - inappCount}</span>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>✓ Con tarjeta guardada: {inappCount}</span>
+          <span style={{ color: "#f59e0b", fontWeight: 700 }}>⚠️ Sin tarjeta: {allClients.length - inappCount}</span>
         </div>
         <div style={{ background: T.border, borderRadius: 8, height: 12, overflow: "hidden" }}>
           <div style={{ width: (allClients.length > 0 ? Math.round((inappCount / allClients.length) * 100) : 0) + "%", height: "100%", background: "linear-gradient(90deg, #22c55e, #16a34a)", borderRadius: 8, transition: "width .3s" }}></div>
@@ -195,30 +220,41 @@ export default function Pagos(props) {
       {/* Client list */}
       <div style={{ background: T.bg2, borderRadius: 14, border: "1px solid " + T.border, overflow: "hidden" }}>
         {filteredMig.map(function (c, i) {
-          var isReady = isReadyForInApp(c.metodo);
-          var isPureInapp = c.metodo === "inapp";
+          var hasCard = hasStoredCard(c);
+          var metodoActualEsInapp = c.metodo === "inapp";
           return <div key={i} style={{
             padding: "12px 20px", borderBottom: "1px solid " + T.border,
             display: "flex", alignItems: "center", gap: 12,
-            background: isReady ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
+            background: hasCard ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
           }}>
             <div style={{
               width: 32, height: 32, borderRadius: 8,
-              background: isReady ? "#22c55e15" : "#f59e0b15",
+              background: hasCard ? "#22c55e15" : "#f59e0b15",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, color: isReady ? "#22c55e" : "#f59e0b"
-            }}>{isReady ? "✓" : "⚠️"}</div>
+              fontSize: 14, color: hasCard ? "#22c55e" : "#f59e0b"
+            }}>{hasCard ? "✓" : "⚠️"}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.nombre}</span>
               <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>{c.bono}</span>
             </div>
             <div style={{
               padding: "6px 12px", borderRadius: 8,
-              background: isReady ? "#22c55e12" : "#f59e0b12",
-              border: "1px solid " + (isReady ? "#22c55e30" : "#f59e0b30"),
+              background: hasCard ? "#22c55e12" : "#f59e0b12",
+              border: "1px solid " + (hasCard ? "#22c55e30" : "#f59e0b30"),
               fontSize: 12, fontWeight: 700,
-              color: isReady ? "#22c55e" : "#f59e0b"
-            }}>{isPureInapp ? "📱 In-App" : isReady ? ("💳 " + metodoInfo(c.metodo).label + " (lista in-app)") : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
+              color: hasCard ? "#22c55e" : "#f59e0b"
+            }}>{hasCard ? (metodoActualEsInapp ? "📱 In-App" : "💳 Tarjeta guardada") : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
+            {/* Toggle manual */}
+            {onToggleCard && <button
+              onClick={function () { onToggleCard(c.nombre, !hasCard); }}
+              title={hasCard ? "Marcar como SIN tarjeta" : "Marcar como CON tarjeta guardada"}
+              style={{
+                padding: "6px 10px", borderRadius: 8,
+                border: "1px solid " + (hasCard ? "#ef444430" : "#22c55e30"),
+                background: hasCard ? "#ef444410" : "#22c55e10",
+                color: hasCard ? "#ef4444" : "#22c55e",
+                fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0
+              }}>{hasCard ? "✕ Quitar" : "✓ Marcar"}</button>}
           </div>;
         })}
       </div>
