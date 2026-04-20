@@ -134,13 +134,18 @@ export default function Pagos(props) {
     }
   });
   var allClients = Object.values(clientMethodMap).sort(function (a, b) {
-    // In-app first (green), then others (orange)
-    var aInapp = a.metodo === "inapp" ? 0 : 1;
-    var bInapp = b.metodo === "inapp" ? 0 : 1;
-    if (aInapp !== bInapp) return aInapp - bInapp;
+    // In-app + tarjeta guardada primero (verde), resto (naranja)
+    var aReady = isReadyForInApp(a.metodo) ? 0 : 1;
+    var bReady = isReadyForInApp(b.metodo) ? 0 : 1;
+    if (aReady !== bReady) return aReady - bReady;
     return a.nombre.localeCompare(b.nombre);
   });
-  var inappCount = allClients.filter(function (c) { return c.metodo === "inapp"; }).length;
+  // "Listo in-app" = inapp real O tarjeta guardada (credit_card / debit)
+  // Con tarjeta guardada, Jesús puede lanzar el cobro in-app directamente.
+  function isReadyForInApp(m) {
+    return m === "inapp" || m === "credit_card" || m === "debit";
+  }
+  var inappCount = allClients.filter(function (c) { return isReadyForInApp(c.metodo); }).length;
   var filteredMig = allClients;
   if (buscarMig) {
     var qm = buscarMig.toLowerCase();
@@ -165,7 +170,7 @@ export default function Pagos(props) {
         padding: "16px 20px", marginBottom: 16
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-          <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 In-App: {inappCount}</span>
+          <span style={{ color: "#22c55e", fontWeight: 700 }}>📱 Listos in-app: {inappCount}</span>
           <span style={{ color: "#f59e0b", fontWeight: 700 }}>⚠️ Otros: {allClients.length - inappCount}</span>
         </div>
         <div style={{ background: T.border, borderRadius: 8, height: 12, overflow: "hidden" }}>
@@ -190,29 +195,30 @@ export default function Pagos(props) {
       {/* Client list */}
       <div style={{ background: T.bg2, borderRadius: 14, border: "1px solid " + T.border, overflow: "hidden" }}>
         {filteredMig.map(function (c, i) {
-          var isInapp = c.metodo === "inapp";
+          var isReady = isReadyForInApp(c.metodo);
+          var isPureInapp = c.metodo === "inapp";
           return <div key={i} style={{
             padding: "12px 20px", borderBottom: "1px solid " + T.border,
             display: "flex", alignItems: "center", gap: 12,
-            background: isInapp ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
+            background: isReady ? (dk ? "rgba(34,197,94,.04)" : "#f0fdf4") : "transparent"
           }}>
             <div style={{
               width: 32, height: 32, borderRadius: 8,
-              background: isInapp ? "#22c55e15" : "#f59e0b15",
+              background: isReady ? "#22c55e15" : "#f59e0b15",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, color: isInapp ? "#22c55e" : "#f59e0b"
-            }}>{isInapp ? "✓" : "⚠️"}</div>
+              fontSize: 14, color: isReady ? "#22c55e" : "#f59e0b"
+            }}>{isReady ? "✓" : "⚠️"}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.nombre}</span>
               <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>{c.bono}</span>
             </div>
             <div style={{
               padding: "6px 12px", borderRadius: 8,
-              background: isInapp ? "#22c55e12" : "#f59e0b12",
-              border: "1px solid " + (isInapp ? "#22c55e30" : "#f59e0b30"),
+              background: isReady ? "#22c55e12" : "#f59e0b12",
+              border: "1px solid " + (isReady ? "#22c55e30" : "#f59e0b30"),
               fontSize: 12, fontWeight: 700,
-              color: isInapp ? "#22c55e" : "#f59e0b"
-            }}>{isInapp ? "📱 In-App" : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
+              color: isReady ? "#22c55e" : "#f59e0b"
+            }}>{isPureInapp ? "📱 In-App" : isReady ? ("💳 " + metodoInfo(c.metodo).label + " (lista in-app)") : (metodoInfo(c.metodo).icon + " " + metodoInfo(c.metodo).label)}</div>
           </div>;
         })}
       </div>
