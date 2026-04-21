@@ -368,14 +368,23 @@ export default function App(){
         var esReserva=false;
         var importePagado=0;
         var precioTotal=parseFloat(a.final_price)||0;
+        var impagoRealFraccionado=false; // plazo individual sin pagar aunque TIMP marque pagado
         if(esFraccionado&&a.installments&&a.installments.length>0){
           var instPaidCount=0;
+          var instTotal=a.installments.length;
           a.installments.forEach(function(inst){
             if(inst.paid){importePagado+=parseFloat(inst.paid_amount)||0;instPaidCount++;}
           });
+          // ─ CASO CRÍTICO ─ TIMP marca paid_at pero hay plazos sin pagar.
+          // Pasa cuando la SUMA total cobrada llega al precio por otras vías,
+          // pero un plazo intermedio quedó pendiente (ej: in-app rechazado).
+          // Ejemplo: Jose Alvaro — 4 plazos, 3 pagados = 625€, 1 sin pagar = 208€.
+          if(pagado&&instPaidCount<instTotal){
+            impagoRealFraccionado=true;
+            pagado=false; // desmarcamos para que el CRM lo trate como impago
+          }
           if(importePagado>0&&!pagado&&precioTotal>0){
             // <= 30% del total → reserva; > 30% → mitad pagada
-            // Guardia: si precioTotal es 0 (dato malo TIMP), no clasificar
             if(importePagado<=precioTotal*0.3){
               esReserva=true;
             }else{
@@ -393,11 +402,32 @@ export default function App(){
           if(amt<0){totalDevoluciones+=Math.abs(amt);}
           else if(p.paid_at){totalPagadoReal+=amt;if(p.payment_method)purchaseMethod=p.payment_method;}
         });
-        // Use the HIGHEST between installments paid and purchases paid
-        var mejorPagado=Math.max(importePagado,totalPagadoReal);
+        // ══════════════════════════════════════════════════════════════════
+        //  Cálculo de mejorPagado (importe realmente pagado de este bono)
+        // ══════════════════════════════════════════════════════════════════
+        //  Para FRACCIONADOS: la única fuente fiable son los plazos de ESTE bono.
+        //  Mezclar totalPagadoReal (suma de TODAS las purchases históricas del
+        //  cliente) es un bug: inflaba el importe pagado con bonos anteriores.
+        //  Ejemplo bug: Maribel paga 485€ de un bono de 970€, pero tenía 1890€
+        //  en purchases históricas → CRM dice "pagó 1890€" y oculta deuda real.
+        //
+        //  Para NO fraccionados con precio conocido: también preferimos el valor
+        //  exacto. Solo usamos totalPagadoReal como fallback si no hay otro dato
+        //  (ej: bono sin fecha de pago pero con transacción en purchases).
+        var mejorPagado;
+        if(esFraccionado){
+          // Verdad = solo plazos con paid:true, acotado al precio total del bono
+          mejorPagado=Math.min(importePagado,precioTotal);
+        }else if(pagado){
+          // Bono no fraccionado marcado pagado → cobrado al precio total
+          mejorPagado=precioTotal;
+        }else{
+          // Bono no fraccionado no marcado pagado → no se ha cobrado
+          mejorPagado=0;
+        }
         var deudaReal=precioTotal-mejorPagado;
         if(deudaReal<0)deudaReal=0;
-        if(pagado)deudaReal=0;
+        if(pagado)deudaReal=0; // pagado ya fue desmarcado si había impago real
         // Use purchase payment method if autopurchase doesn't have one
         var metodoFinal=a.payment_method||purchaseMethod||"";
         parsed.push({
@@ -416,6 +446,7 @@ export default function App(){
           importePagado:mejorPagado,
           totalDevoluciones:totalDevoluciones,
           deudaReal:deudaReal,
+          impagoRealFraccionado:impagoRealFraccionado,
           telefono:sub.phone||"",
           email:sub.email||"",
           nextBooking:sub.next_booking_for||""
