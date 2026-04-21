@@ -319,13 +319,13 @@ export default function App(){
       console.log("[syncBonos] Cargados "+autos.length+" autopurchases, "+subs.length+" subs, "+purchases.length+" purchases");
       var parsed=[];
       // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
-      var ENTRENAMIENTO_BONOS=[
-        "bono 10 sesiones duales","bono 20 sesiones duales","bono 5 sesiones duales",
-        "entrenamiento sesión","entrenamiento sesion",
-        "time partner","time partner plus","time partner plus trimestral",
-        "time partner pro","time partner pro trimestral","time partner trimestral",
-        "time pro+","time pro trimestral+","time pro trimestral +"
-      ];
+        var ENTRENAMIENTO_BONOS=[
+  "time partner","time partner plus","time partner pro",
+  "time partner trimestral","time partner plus trimestral","time partner pro trimestral",
+  "time pro+","time pro trimestral+",
+  "bono 5 sesiones","bono 6 sesiones","bono 10 sesiones","bono 20 sesiones",
+  "entrenamiento sesión","entrenamiento sesion"
+];
       function isTrainingBono(caption){
         if(!caption)return false;
         var c=caption.toLowerCase().trim();
