@@ -1028,8 +1028,11 @@ export default function App(){
   />}
 
   {mv==="cancelaciones"&&<Cancelaciones
-    theme={T}
-    dk={dk}
+  theme={T}
+  dk={dk}
+  bonos={bonos}
+  clients={cl}
+/>}
   />}
 
   {mv==="horarios"&&<div>
