@@ -319,13 +319,13 @@ export default function App(){
       console.log("[syncBonos] Cargados "+autos.length+" autopurchases, "+subs.length+" subs, "+purchases.length+" purchases");
       var parsed=[];
       // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
-        var ENTRENAMIENTO_BONOS=[
-  "time partner","time partner plus","time partner pro",
-  "time partner trimestral","time partner plus trimestral","time partner pro trimestral",
-  "time pro+","time pro trimestral+",
-  "bono 5 sesiones","bono 6 sesiones","bono 10 sesiones","bono 20 sesiones",
-  "entrenamiento sesión","entrenamiento sesion"
-];
+      var ENTRENAMIENTO_BONOS=[
+        "bono 10 sesiones duales","bono 20 sesiones duales","bono 5 sesiones duales",
+        "entrenamiento sesión","entrenamiento sesion",
+        "time partner","time partner plus","time partner plus trimestral",
+        "time partner pro","time partner pro trimestral","time partner trimestral",
+        "time pro+","time pro trimestral+","time pro trimestral +"
+      ];
       function isTrainingBono(caption){
         if(!caption)return false;
         var c=caption.toLowerCase().trim();
@@ -497,30 +497,129 @@ export default function App(){
         var wb=XLSX.read(ev.target.result,{type:"array",cellDates:true});
         var ws=wb.Sheets[wb.SheetNames[0]];
         var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-        var hIdx=rows.findIndex(function(r){return r[0]==="Número de factura"||r[0]==="ID"||r[3]==="Cliente (nombre)";});
-        if(hIdx<0)hIdx=rows.findIndex(function(r){return r&&r.some&&r.some(function(c){return c==="Cliente (nombre)";});});
-        if(hIdx<0){alert("No se encontró la cabecera del archivo");return;}
-        var parsed=[];
-        for(var i=hIdx+1;i<rows.length;i++){
-          var r=rows[i];
-          if(!r||!r[3])continue;
-          var nombre=(r[3]||"")+" "+(r[4]||"");
-          nombre=nombre.trim();
-          if(!nombre)continue;
-          parsed.push({
-            nombre:nombre,
-            totalSesiones:+r[12]||0,
-            usadas:+r[13]||0,
-            sinCanjear:+r[14]||0,
-            enUso:+r[15]||0,
-            caducadas:+r[16]||0,
-            tipoBono:r[17]||"",
-            fechaValor:r[21]||""
-          });
+
+        // ══════════════════════════════════════════════════════════════
+        //  PARSER MULTI-SECCIÓN
+        // ══════════════════════════════════════════════════════════════
+        // El Excel "Cuotas Vigentes" de TIMP tiene múltiples secciones (una por tipo de bono).
+        // Cada sección tiene:
+        //   Fila N:   Título del bono (ej: "Time partner plus") — sólo en columna 0
+        //   Fila N+2: Cabecera (contiene "Número de factura", "Cliente (nombre)", etc.)
+        //   Fila N+3..M: Filas de cliente
+        //   Fila M+1: "No existen compras para esta cuota" o nueva sección o fin
+        // También hay títulos de grupo como "Time dual - Time dual 2026-04-20/2026-04-26"
+        // y "Bonos - Bonos 2026-04-20/2026-04-26" que debemos ignorar como secciones.
+
+        // Whitelist: solo importamos estos tipos de bono (el resto se ignora: fisio, nutrición, etc.)
+        var WHITELIST_TIPOS = [
+          "time partner","time partner plus","time partner trimestral","time partner plus trimestral",
+          "time pro","time pro trimestral","time pro+","time pro plus","time pro+ trimestral",
+          "bono 5 sesiones","bono 10 sesiones","bono 20 sesiones",
+          "bono 5 sesiones duales","bono 10 sesiones duales","bono 20 sesiones duales",
+          "entrenamiento sesion","entrenamiento sesión"
+        ];
+        function isWhitelisted(tipo){
+          if(!tipo)return false;
+          var t=(""+tipo).toLowerCase().trim();
+          return WHITELIST_TIPOS.some(function(w){return t.indexOf(w)>=0;});
         }
+
+        function isSectionTitle(r){
+          // Una sola celda con texto, resto vacías
+          if(!r)return false;
+          var vals=r.filter(function(x){return x!=null&&x!=="";});
+          return vals.length===1 && typeof vals[0]==="string";
+        }
+        function isHeaderRow(r){
+          return r && r.some && r.some(function(c){return c==="Cliente (nombre)";});
+        }
+        function isGroupHeader(txt){
+          // Títulos como "Time dual - Time dual 2026-04-20/2026-04-26" son encabezados de grupo
+          return /\d{4}-\d{2}-\d{2}/.test(txt) || /^Bonos?\s*-/i.test(txt);
+        }
+
+        // Recorremos el Excel identificando secciones
+        var parsed=[];
+        var tipoBonoActual="";
+        var enSeccion=false;  // true cuando estamos dentro de datos de una sección
+        var cabeceraCols={};  // mapeo de nombre de columna -> índice
+
+        for(var i=0;i<rows.length;i++){
+          var r=rows[i];
+          if(!r)continue;
+
+          // Detectar título de sección (tipo de bono)
+          if(isSectionTitle(r)){
+            var txt=(""+r.find(function(x){return x!=null&&x!=="";})).trim();
+            // Ignorar títulos de grupo y mensajes "No existen..."
+            if(/^no existen/i.test(txt)){enSeccion=false;continue;}
+            if(isGroupHeader(txt)){enSeccion=false;continue;}
+            // Es un tipo de bono
+            tipoBonoActual=txt;
+            enSeccion=false;  // aún no hemos visto la cabecera
+            continue;
+          }
+
+          // Detectar cabecera de la sección
+          if(isHeaderRow(r)){
+            cabeceraCols={};
+            for(var c=0;c<r.length;c++){
+              if(r[c])cabeceraCols[r[c]]=c;
+            }
+            enSeccion=true;
+            continue;
+          }
+
+          // Si estamos en una sección activa y es fila de cliente
+          if(enSeccion && tipoBonoActual){
+            // ¿Este tipo está en la whitelist?
+            if(!isWhitelisted(tipoBonoActual)){continue;}
+
+            var cNombre=cabeceraCols["Cliente (nombre)"];
+            var cApe=cabeceraCols["Cliente (apellidos)"];
+            var cTotal=cabeceraCols["Saldo total"];
+            var cUsado=cabeceraCols["Saldo usado"];
+            var cSinCanj=cabeceraCols["Saldo sin canjear"];
+            var cEnUso=cabeceraCols["Saldo en uso"];
+            var cCaducado=cabeceraCols["Saldo caducado"];
+            var cValor=cabeceraCols["Valor"];
+            var cPagado=cabeceraCols["Pagado"];
+            var cPendiente=cabeceraCols["Pendiente de pago"];
+            var cTotalCobro=cabeceraCols["Total"];
+
+            var nombre=r[cNombre];
+            var apellidos=r[cApe];
+            if(!nombre)continue; // fila vacía
+            // Descartar filas que sean cabeceras repetidas por error
+            if(typeof nombre==="string" && nombre.indexOf("Cliente")===0)continue;
+
+            var fullName=((nombre||"")+" "+(apellidos||"")).trim();
+            if(!fullName)continue;
+
+            parsed.push({
+              nombre:fullName,
+              tipoBono:tipoBonoActual,
+              totalSesiones:+r[cTotal]||0,
+              usadas:+r[cUsado]||0,
+              sinCanjear:+r[cSinCanj]||0,
+              enUso:+r[cEnUso]||0,
+              caducadas:+r[cCaducado]||0,
+              fechaValor:r[cValor]||"",
+              totalCobro:+r[cTotalCobro]||0,
+              totalPagado:+r[cPagado]||0,
+              pendientePago:+r[cPendiente]||0
+            });
+          }
+        }
+
         setCuotasExcel(parsed);
         dbSave("bonos_timp","cuotas_excel",parsed).catch(function(){});
-        alert("✅ "+parsed.length+" registros de cuotas importados — sesiones actualizadas");
+        // Agrupar por tipo para el mensaje al usuario
+        var porTipo={};
+        parsed.forEach(function(p){porTipo[p.tipoBono]=(porTipo[p.tipoBono]||0)+1;});
+        var msg="✅ "+parsed.length+" registros importados:\n";
+        Object.keys(porTipo).forEach(function(t){msg+="• "+t+": "+porTipo[t]+"\n";});
+        alert(msg);
       }catch(err){alert("Error: "+err.message);}
     };
     reader.readAsArrayBuffer(file);
@@ -1028,11 +1127,8 @@ export default function App(){
   />}
 
   {mv==="cancelaciones"&&<Cancelaciones
-  theme={T}
-  dk={dk}
-  bonos={bonos}
-  clients={cl}
-/>}
+    theme={T}
+    dk={dk}
   />}
 
   {mv==="horarios"&&<div>
