@@ -141,7 +141,8 @@ export default function Cancelaciones(props) {
 
     // Reporte semanal — sesiones de esta semana (hasta hoy)
     if (isThisWeek) {
-// null = vino ✅, "unattended" = no vino ❌      validBookings.forEach(function (b) {
+      // Sesiones que vinieron (valid + attended o sin attendance_status)
+      validBookings.forEach(function (b) {
         var name = b.full_name;
         if (!weeklyReport[name]) {
           // Buscar tipo de bono
@@ -153,7 +154,7 @@ export default function Cancelaciones(props) {
           var tipo = bonoCliente ? (bonoCliente.tipoBono || "") : "";
           weeklyReport[name] = { diasContratados: diasBono(tipo), tipoBono: tipo, vino: 0, noVino: 0, cancelo: 0 };
         }
-        if (dateStr > todayStr) return;if (b.attendance_status === "unattended") {
+        if (b.attendance_status === "unattended") {
           weeklyReport[name].noVino++;
         } else {
           weeklyReport[name].vino++;
