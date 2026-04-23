@@ -71,6 +71,8 @@ export default function Renovaciones(props) {
   var bonos = props.bonos || [];
   var clients = props.clients || [];
   var cuotasExcel = props.cuotasExcel || [];
+  var reservasExcel = props.reservasExcel || [];
+  var importReservas = props.importReservas;
   var blacklist = props.blacklist || [];
   var saveBlacklist = props.saveBlacklist || function(){};
   var renData = props.renData || {};
@@ -201,20 +203,69 @@ export default function Renovaciones(props) {
   });
 
   // ══════════════════════════════════════════════════════════════════════
-  //  REGLA EXCEL (Jesús): cuando un cliente agota el bono con las sesiones
-  //  disponibles de la semana X del Excel (usadas + caducadas + sinCanjear >= total),
-  //  se le pone en Renovaciones en la SEMANA SIGUIENTE (X+1).
-  //
-  //  Filtros aplicados:
-  //    - Excluir bonos 100% caducados (apaños fiscales: caducadas >= total)
-  //    - Deduplicar por cliente: si aparece con varios bonos agotados,
-  //      solo el de mayor "total" se mantiene.
-  //
-  //  Las entradas que ya vienen por fechaValor de TIMP no se tocan.
+  //  REGLA EXCEL (Jesús) — Lógica híbrida
   // ══════════════════════════════════════════════════════════════════════
+  //  Si tenemos el REPORTE DE RESERVAS cargado:
+  //    → Usamos cuenta real: para cada bono, contamos reservas (Aceptadas,
+  //      Canjeada Si o No) cuyo Inicio cae entre fechaValor del bono
+  //      y domingo de la semana del Excel de Cuotas.
+  //    → Si esas reservas >= total → bono agotado → Renovaciones semana siguiente.
+  //
+  //  Si NO tenemos Reservas (fallback):
+  //    → Lógica antigua: consumido = usadas + caducadas del Excel de Cuotas
+  //    → Agotado si consumido >= total AND enUso == 0.
+  //
+  //  Filtros comunes:
+  //    - Blacklist
+  //    - Apaños (caducadas = total)
+  //    - Otro bono activo en paralelo
+  //    - Dedup por cliente
+  //    - Ya renovó (hasNewerBono)
+  //    - Status = baja
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Helper: match de tipo de bono entre Excel Cuotas y campo Venta del reporte Reservas
+  function matchBonoType(ventaReserva, tipoCuota) {
+    if (!ventaReserva || !tipoCuota) return false;
+    var v = ventaReserva.toLowerCase();
+    var t = tipoCuota.toLowerCase().trim();
+    // Hacer match estricto: el tipo del Cuota debe aparecer completo en la Venta
+    // Ejemplo: "Time partner plus trimestral" debe estar en "Time partner plus trimestral (Time dual)"
+    return v.indexOf(t) >= 0;
+  }
+
+  // Helper: cuenta reservas reales de un cliente/bono hasta domingo semana Excel
+  function contarReservasReales(nombreCliente, tipoBono, fechaValorBono, domingoSemanaExcel) {
+    if (!reservasExcel.length) return null; // sin datos: fallback
+    var count = 0;
+    reservasExcel.forEach(function (rv) {
+      if (rv.estado !== "Aceptada") return; // canceladas no cuentan
+      // Regaladas (cortesía) tampoco son del bono
+      if (rv.canjeada !== "Si" && rv.canjeada !== "No") return;
+      if (!matchesName(rv.nombre, nombreCliente)) return;
+      if (!matchBonoType(rv.venta, tipoBono)) return;
+      var ini = new Date(rv.inicio);
+      if (isNaN(ini.getTime())) return;
+      if (ini < fechaValorBono) return; // anterior al bono actual
+      if (ini > domingoSemanaExcel) return; // futura (fuera de ventana)
+      count++;
+    });
+    return count;
+  }
+
   if (cuotasExcel.length > 0) {
-    // Primero: detectar qué clientes tienen al menos un bono AÚN ACTIVO
-    // (con enUso>0 o aún con sesiones sin consumir). Si lo tienen, no renuevan.
+    // Domingo de la semana del Excel de Cuotas
+    var domingoSemanaExcel = null;
+    cuotasExcel.forEach(function (cx) {
+      if (cx.semanaExcel && !domingoSemanaExcel) {
+        var d = new Date(cx.semanaExcel + "T00:00:00");
+        d.setDate(d.getDate() + 6);
+        d.setHours(23, 59, 59, 999);
+        domingoSemanaExcel = d;
+      }
+    });
+
+    // Clientes con OTRO bono aún activo (para evitar falsos agotados)
     var clientesConBonoActivo = {};
     cuotasExcel.forEach(function (cx) {
       var tot = +cx.totalSesiones || 0;
@@ -222,44 +273,72 @@ export default function Renovaciones(props) {
       var cad = +cx.caducadas || 0;
       var eu = +cx.enUso || 0;
       var cons = usa + cad;
-      // Bono activo: todavía tiene enUso O aún le quedan sesiones sin consumir
       if (eu > 0 || cons < tot) {
         var k = (cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         clientesConBonoActivo[k] = true;
       }
     });
 
-    // Segundo: buscar candidatos agotados
     var candidatos = [];
     cuotasExcel.forEach(function (cx) {
       if (!cx.nombre || !cx.totalSesiones) return;
 
-      // Blacklist: excluir nombres marcados
+      // Blacklist
       if (inBlacklist(cx.nombre)) return;
 
       var tot = +cx.totalSesiones || 0;
       var usa = +cx.usadas || 0;
       var cad = +cx.caducadas || 0;
-      var scn = +cx.sinCanjear || 0;
       var eu = +cx.enUso || 0;
-      var cons = usa + cad; // SOLO usadas + caducadas
 
-      // Regla: bono agotado si consumido >= total AND enUso == 0
-      var agotado = (cx.estadoBono === "agotado") ||
-                    (tot > 0 && cons >= tot && eu === 0);
-      if (!agotado) return;
-
-      // Filtro "apaño": si todas las sesiones están caducadas
+      // Apaños: bono 100% caducado
       if (cad >= tot) return;
 
-      // Filtro: si el cliente tiene OTRO bono activo en el Excel, no aparece
+      // Cliente con otro bono activo
       var k = (cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       if (clientesConBonoActivo[k]) return;
 
-      candidatos.push({ cx: cx, total: tot, cons: cons });
+      // ═══ DETECCIÓN DE AGOTAMIENTO ═══
+      var agotado = false;
+
+      // Método preferido: usar el reporte de Reservas si está cargado
+      if (reservasExcel.length > 0 && domingoSemanaExcel) {
+        // Buscar fecha de inicio del bono en TIMP API (allBonos)
+        var bonosCliente = allBonos.filter(function (b) {
+          if (!matchesName(b.nombre, cx.nombre)) return false;
+          return matchBonoType(b.tipo, cx.tipoBono);
+        });
+        // Coger el más reciente
+        var fechaValorBono = null;
+        if (bonosCliente.length > 0) {
+          bonosCliente.sort(function (a, b) {
+            return (b.fechaValor ? b.fechaValor.getTime() : 0) - (a.fechaValor ? a.fechaValor.getTime() : 0);
+          });
+          fechaValorBono = bonosCliente[0].fechaValor;
+        }
+        // Fallback: fecha Valor del Excel de Cuotas
+        if (!fechaValorBono && cx.fechaValor) {
+          var fv = new Date(cx.fechaValor);
+          if (!isNaN(fv.getTime())) fechaValorBono = fv;
+        }
+        if (fechaValorBono) {
+          var consumidoReal = contarReservasReales(cx.nombre, cx.tipoBono, fechaValorBono, domingoSemanaExcel);
+          if (consumidoReal !== null && consumidoReal >= tot) {
+            agotado = true;
+          }
+        }
+      } else {
+        // Fallback: lógica antigua con Cuotas
+        var cons = usa + cad;
+        if (tot > 0 && cons >= tot && eu === 0) agotado = true;
+      }
+
+      if (!agotado) return;
+
+      candidatos.push({ cx: cx, total: tot });
     });
 
-    // Deduplicar: si un cliente tiene varios candidatos, nos quedamos con el de mayor total
+    // Deduplicar por cliente (mayor total)
     var dedupMap = {};
     candidatos.forEach(function (c) {
       var k = (c.cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -270,7 +349,7 @@ export default function Renovaciones(props) {
       var c = dedupMap[k];
       var cx = c.cx;
 
-      // Calcular la semana destino: lunes de la semana del Excel + 7 días
+      // Semana destino: lunes semana Excel + 7 días
       var renewMon;
       if (cx.semanaExcel) {
         var d = new Date(cx.semanaExcel + "T00:00:00");
@@ -278,30 +357,27 @@ export default function Renovaciones(props) {
         d.setHours(0, 0, 0, 0);
         renewMon = getMonday(d);
       } else {
-        // Fallback: usar la semana siguiente a la actual
         var d2 = new Date(thisMonday);
         d2.setDate(d2.getDate() + 7);
         renewMon = getMonday(d2);
       }
 
-      // Check si el cliente ya tiene una entrada en esa semana por TIMP (match seguro)
+      // Evitar duplicado con entry TIMP esa semana
       var alreadyThatWeek = entries.some(function (e) {
         return matchesName(e.nombre, cx.nombre) &&
           e.renewMonday.getTime() === renewMon.getTime();
       });
       if (alreadyThatWeek) return;
 
-      // Skip si el cliente ya ha renovado (tiene un bono nuevo con fechaValor >= renewMon)
+      // Ya renovó
       var hasNewerBono = allBonos.some(function (b) {
         return matchesName(b.nombre, cx.nombre) &&
           b.fechaValor && b.fechaValor >= renewMon;
       });
       if (hasNewerBono) return;
 
-      // Localizar cliente en CRM
+      // Cliente
       var crmClient = clients.find(function (cl) { return matchesName(cl.name, cx.nombre); });
-
-      // Excluir si el cliente está dado de BAJA en el CRM (ya se fue, no va a renovar)
       if (crmClient && crmClient.status === "baja") return;
 
       var total = +cx.totalSesiones || 0;
@@ -513,12 +589,15 @@ export default function Renovaciones(props) {
     {/* Header */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
       <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>🔄 Renovaciones</h2>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap:"wrap" }}>
         <button onClick={function(){setShowBl(true);}} style={{ padding: "8px 12px", background: "transparent", border: "1px solid " + T.border, borderRadius: 9, color: T.text2, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
           🚫 Ignorados ({blacklist.length})
         </button>
         <label style={{ padding: "8px 16px", background: "linear-gradient(135deg,#394265,#4a5580)", border: "none", borderRadius: 9, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-          📤 Importar Cuotas<input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{ display: "none" }} />
+          📤 Cuotas<input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{ display: "none" }} />
+        </label>
+        <label style={{ padding: "8px 16px", background: "linear-gradient(135deg,#2d4a5a,#3c6478)", border: "none", borderRadius: 9, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          📤 Reservas{reservasExcel.length>0?" ("+reservasExcel.length+")":""}<input type="file" accept=".xls,.xlsx" onChange={importReservas} style={{ display: "none" }} />
         </label>
       </div>
     </div>
