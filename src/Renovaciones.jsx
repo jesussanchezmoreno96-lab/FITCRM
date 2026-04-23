@@ -71,11 +71,32 @@ export default function Renovaciones(props) {
   var bonos = props.bonos || [];
   var clients = props.clients || [];
   var cuotasExcel = props.cuotasExcel || [];
+  var blacklist = props.blacklist || [];
+  var saveBlacklist = props.saveBlacklist || function(){};
   var renData = props.renData || {};
   var setRenData = props.setRenData;
   var onSaveRenData = props.onSaveRenData;
   var onChangeStatus = props.onChangeStatus;
   var importCuotas = props.importCuotas;
+
+  // Helper: normalizar nombre para comparación
+  function normN(s){return (s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
+  // Helper: cliente está en la blacklist?
+  function inBlacklist(nombre){
+    if(!blacklist.length)return false;
+    var n=normN(nombre);
+    return blacklist.some(function(b){
+      var bn=normN(b);
+      if(!bn)return false;
+      var wa=n.split(" ").filter(Boolean);
+      var wb=bn.split(" ").filter(Boolean);
+      if(wa.length>=1&&wb.length>=1&&wa[0]===wb[0]){
+        if(wb.length===1)return true;
+        if(wa.length>=2&&wb.length>=2&&wa[1]===wb[1])return true;
+      }
+      return n.indexOf(bn)>=0;
+    });
+  }
 
   var _ = useState;
   var rw_ = _("auto"), renWeek = rw_[0], setRenWeek = rw_[1];
@@ -84,6 +105,8 @@ export default function Renovaciones(props) {
   var noteTmp_ = _(""), noteTmp = noteTmp_[0], setNoteTmp = noteTmp_[1];
   var moveClient_ = _(null), moveClient = moveClient_[0], setMoveClient = moveClient_[1];
   var moveTarget_ = _(""), moveTarget = moveTarget_[0], setMoveTarget = moveTarget_[1];
+  var bl_ = _(false), showBl = bl_[0], setShowBl = bl_[1];
+  var blNew_ = _(""), blNew = blNew_[0], setBlNew = blNew_[1];
 
   if (!bonos.length) {
     return (<div>
@@ -129,6 +152,9 @@ export default function Renovaciones(props) {
 
   var entries = [];
   Object.values(bySub).forEach(function (client) {
+    // Blacklist: excluir cliente completo
+    if (inBlacklist(client.nombre)) return;
+
     var sorted = client.bonos.slice().sort(function (a, b) { return a.fechaValor - b.fechaValor; });
     var crmClient = clients.find(function (cl) { return matchesName(cl.name, client.nombre); });
     var nextBooking = crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null;
@@ -174,51 +200,134 @@ export default function Renovaciones(props) {
     }
   });
 
-  // ── Check cuotasExcel for clients who exhausted their bono or have 1 session left ──
+  // ══════════════════════════════════════════════════════════════════════
+  //  REGLA EXCEL (Jesús): cuando un cliente agota el bono con las sesiones
+  //  disponibles de la semana X del Excel (usadas + caducadas + sinCanjear >= total),
+  //  se le pone en Renovaciones en la SEMANA SIGUIENTE (X+1).
+  //
+  //  Filtros aplicados:
+  //    - Excluir bonos 100% caducados (apaños fiscales: caducadas >= total)
+  //    - Deduplicar por cliente: si aparece con varios bonos agotados,
+  //      solo el de mayor "total" se mantiene.
+  //
+  //  Las entradas que ya vienen por fechaValor de TIMP no se tocan.
+  // ══════════════════════════════════════════════════════════════════════
   if (cuotasExcel.length > 0) {
-    var thisKey = localKey(thisMonday);
+    // Primero: detectar qué clientes tienen al menos un bono AÚN ACTIVO
+    // (con enUso>0 o aún con sesiones sin consumir). Si lo tienen, no renuevan.
+    var clientesConBonoActivo = {};
+    cuotasExcel.forEach(function (cx) {
+      var tot = +cx.totalSesiones || 0;
+      var usa = +cx.usadas || 0;
+      var cad = +cx.caducadas || 0;
+      var eu = +cx.enUso || 0;
+      var cons = usa + cad;
+      // Bono activo: todavía tiene enUso O aún le quedan sesiones sin consumir
+      if (eu > 0 || cons < tot) {
+        var k = (cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        clientesConBonoActivo[k] = true;
+      }
+    });
+
+    // Segundo: buscar candidatos agotados
+    var candidatos = [];
     cuotasExcel.forEach(function (cx) {
       if (!cx.nombre || !cx.totalSesiones) return;
-      var total = +cx.totalSesiones;
-      var consumidas = (+cx.usadas || 0) + (+cx.caducadas || 0) + (+cx.sinCanjear || 0);
-      var restantes = total - consumidas;
 
-      // Skip if more than 1 session remaining
-      if (restantes > 1) return;
+      // Blacklist: excluir nombres marcados
+      if (inBlacklist(cx.nombre)) return;
 
-      // Check if this client already has an entry this week (match seguro)
-      var alreadyThisWeek = entries.some(function (e) {
+      var tot = +cx.totalSesiones || 0;
+      var usa = +cx.usadas || 0;
+      var cad = +cx.caducadas || 0;
+      var scn = +cx.sinCanjear || 0;
+      var eu = +cx.enUso || 0;
+      var cons = usa + cad; // SOLO usadas + caducadas
+
+      // Regla: bono agotado si consumido >= total AND enUso == 0
+      var agotado = (cx.estadoBono === "agotado") ||
+                    (tot > 0 && cons >= tot && eu === 0);
+      if (!agotado) return;
+
+      // Filtro "apaño": si todas las sesiones están caducadas
+      if (cad >= tot) return;
+
+      // Filtro: si el cliente tiene OTRO bono activo en el Excel, no aparece
+      var k = (cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (clientesConBonoActivo[k]) return;
+
+      candidatos.push({ cx: cx, total: tot, cons: cons });
+    });
+
+    // Deduplicar: si un cliente tiene varios candidatos, nos quedamos con el de mayor total
+    var dedupMap = {};
+    candidatos.forEach(function (c) {
+      var k = (c.cx.nombre || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (!dedupMap[k] || c.total > dedupMap[k].total) dedupMap[k] = c;
+    });
+
+    Object.keys(dedupMap).forEach(function (k) {
+      var c = dedupMap[k];
+      var cx = c.cx;
+
+      // Calcular la semana destino: lunes de la semana del Excel + 7 días
+      var renewMon;
+      if (cx.semanaExcel) {
+        var d = new Date(cx.semanaExcel + "T00:00:00");
+        d.setDate(d.getDate() + 7);
+        d.setHours(0, 0, 0, 0);
+        renewMon = getMonday(d);
+      } else {
+        // Fallback: usar la semana siguiente a la actual
+        var d2 = new Date(thisMonday);
+        d2.setDate(d2.getDate() + 7);
+        renewMon = getMonday(d2);
+      }
+
+      // Check si el cliente ya tiene una entrada en esa semana por TIMP (match seguro)
+      var alreadyThatWeek = entries.some(function (e) {
         return matchesName(e.nombre, cx.nombre) &&
-          e.renewMonday.getTime() === thisMonday.getTime();
+          e.renewMonday.getTime() === renewMon.getTime();
       });
-      if (alreadyThisWeek) return;
+      if (alreadyThatWeek) return;
 
-      // Skip if client already has a NEWER paid bono from API (already renewed)
-      var hasNewerPaidBono = allBonos.some(function (b) {
+      // Skip si el cliente ya ha renovado (tiene un bono nuevo con fechaValor >= renewMon)
+      var hasNewerBono = allBonos.some(function (b) {
         return matchesName(b.nombre, cx.nombre) &&
-          b.pagado && b.fechaValor && b.fechaValor >= thisMonday;
+          b.fechaValor && b.fechaValor >= renewMon;
       });
-      if (hasNewerPaidBono) return;
+      if (hasNewerBono) return;
 
-      // Find matching CRM client (match seguro)
+      // Localizar cliente en CRM
       var crmClient = clients.find(function (cl) { return matchesName(cl.name, cx.nombre); });
 
-      var isAgotado = restantes <= 0;
-      var isUltima = restantes === 1;
+      // Excluir si el cliente está dado de BAJA en el CRM (ya se fue, no va a renovar)
+      if (crmClient && crmClient.status === "baja") return;
+
+      var total = +cx.totalSesiones || 0;
+      var consumidasTotal = (+cx.usadas || 0) + (+cx.caducadas || 0);
+      var restantes = total - consumidasTotal;
 
       entries.push({
         nombre: cx.nombre,
         tipo: cx.tipoBono || "",
         precio: 0,
         pagado: false, fechaPago: "",
-        renewMonday: thisMonday,
-        fechaValor: thisMonday,
+        renewMonday: renewMon,
+        fechaValor: renewMon,
         fechaFin: null,
-        source: isAgotado ? "agotado" : "ultima_sesion",
+        source: "agotado_excel",
         nextBooking: crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null,
         clientId: crmClient ? crmClient.id : null,
         clientStatus: crmClient ? crmClient.status : null,
-        sesiones: { total: total, usadas: +cx.usadas || 0, caducadas: +cx.caducadas || 0, sinCanjear: +cx.sinCanjear || 0, enUso: +cx.enUso || 0, restantes: restantes }
+        sesiones: {
+          total: total,
+          usadas: +cx.usadas || 0,
+          caducadas: +cx.caducadas || 0,
+          sinCanjear: +cx.sinCanjear || 0,
+          enUso: +cx.enUso || 0,
+          restantes: restantes
+        }
       });
     });
   }
@@ -404,10 +513,58 @@ export default function Renovaciones(props) {
     {/* Header */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
       <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>🔄 Renovaciones</h2>
-      <label style={{ padding: "8px 16px", background: "linear-gradient(135deg,#394265,#4a5580)", border: "none", borderRadius: 9, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-        📤 Importar Cuotas<input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{ display: "none" }} />
-      </label>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={function(){setShowBl(true);}} style={{ padding: "8px 12px", background: "transparent", border: "1px solid " + T.border, borderRadius: 9, color: T.text2, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+          🚫 Ignorados ({blacklist.length})
+        </button>
+        <label style={{ padding: "8px 16px", background: "linear-gradient(135deg,#394265,#4a5580)", border: "none", borderRadius: 9, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          📤 Importar Cuotas<input type="file" accept=".xls,.xlsx" onChange={importCuotas} style={{ display: "none" }} />
+        </label>
+      </div>
     </div>
+
+    {/* Modal Lista Negra */}
+    {showBl && <div onClick={function(){setShowBl(false);}} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
+      <div onClick={function(e){e.stopPropagation();}} style={{background:T.bg2,borderRadius:14,border:"1px solid "+T.border,padding:24,maxWidth:500,width:"100%",maxHeight:"80vh",overflow:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h3 style={{margin:0,fontSize:18,fontWeight:800,color:T.text}}>🚫 Clientes ignorados</h3>
+          <button onClick={function(){setShowBl(false);}} style={{background:"none",border:"none",color:T.text3,fontSize:20,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{fontSize:12,color:T.text3,marginBottom:12}}>Estos clientes no aparecerán en Renovaciones ni se crearán desde el Excel. Útil para Gympass sin marcar, cuentas de prueba, etc.</div>
+        <div style={{display:"flex",gap:6,marginBottom:14}}>
+          <input
+            type="text"
+            value={blNew}
+            onChange={function(e){setBlNew(e.target.value);}}
+            placeholder="Nombre a ignorar (ej: Cristhina)"
+            onKeyDown={function(e){
+              if(e.key==="Enter"&&blNew.trim()){
+                var nuevo=blacklist.concat([blNew.trim()]);
+                saveBlacklist(nuevo);
+                setBlNew("");
+              }
+            }}
+            style={{flex:1,padding:"9px 12px",background:T.bg,border:"1px solid "+T.border,borderRadius:8,color:T.text,fontSize:13}}
+          />
+          <button onClick={function(){
+            if(!blNew.trim())return;
+            var nuevo=blacklist.concat([blNew.trim()]);
+            saveBlacklist(nuevo);
+            setBlNew("");
+          }} style={{padding:"9px 16px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Añadir</button>
+        </div>
+        {blacklist.length===0 && <div style={{textAlign:"center",padding:20,color:T.text3,fontSize:13}}>Lista vacía</div>}
+        {blacklist.map(function(n,i){
+          return <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:T.bg,borderRadius:8,marginBottom:6,border:"1px solid "+T.border}}>
+            <span style={{fontSize:13,color:T.text}}>{n}</span>
+            <button onClick={function(){
+              var nuevo=blacklist.filter(function(_,idx){return idx!==i;});
+              saveBlacklist(nuevo);
+            }} style={{background:"none",border:"none",color:"#ef4444",fontSize:12,cursor:"pointer",fontWeight:700}}>Quitar</button>
+          </div>;
+        })}
+      </div>
+    </div>}
 
     {/* Notifications */}
     {todayNotifs.length > 0 && showNotifs && <div style={{ background: dk ? "rgba(245,158,11,.06)" : "#fefce8", border: "1px solid " + (dk ? "rgba(245,158,11,.2)" : "#fde68a"), borderRadius: 14, padding: "16px 20px", marginBottom: 20, position: "relative" }}>
