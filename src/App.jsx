@@ -479,12 +479,52 @@ export default function App(){
   // Import cuotas from TIMP Excel — se guarda aparte para sesiones consumidas
   var cuotasExcel_=_([]),cuotasExcel=cuotasExcel_[0],setCuotasExcel=cuotasExcel_[1];
 
-  // Load cuotas excel from Supabase on init
+  // Lista negra de clientes que nunca deben aparecer (Gympass sin marcar, ex-clientes, etc)
+  var blacklist_=_([]),blacklist=blacklist_[0],setBlacklist=blacklist_[1];
+
+  // Load cuotas excel y blacklist desde Supabase on init
   useEffect(function(){
-    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){
-      if(x.id==="cuotas_excel")setCuotasExcel(x.data);
-    });}}).catch(function(){});
+    dbGet("bonos_timp").then(function(r){
+      var blFound=false;
+      if(r&&r.length>0){r.forEach(function(x){
+        if(x.id==="cuotas_excel")setCuotasExcel(x.data);
+        if(x.id==="client_blacklist"){setBlacklist(x.data||[]);blFound=true;}
+      });}
+      // Si nunca se ha creado la blacklist, inicializar con los clientes Gympass conocidos
+      if(!blFound){
+        var inicial=["Cristhina","Javier Anitua","Fatima Albizuri","Laura Guerin","Rafaella Lopez"];
+        setBlacklist(inicial);
+        dbSave("bonos_timp","client_blacklist",inicial).catch(function(){});
+      }
+    }).catch(function(){});
   },[]);
+
+  // Normalizar nombre para comparar (sin tildes, lowercase, trim)
+  function normName(s){
+    return (s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  }
+  // Comprobar si un nombre está en la blacklist (coincide primer nombre o substring)
+  function isBlacklisted(nombre){
+    if(!blacklist||!blacklist.length)return false;
+    var n=normName(nombre);
+    return blacklist.some(function(b){
+      var bn=normName(b);
+      if(!bn)return false;
+      // Match: primer nombre igual o el nombre de la lista es substring
+      var wa=n.split(" ").filter(Boolean);
+      var wb=bn.split(" ").filter(Boolean);
+      if(wa.length>=1&&wb.length>=1&&wa[0]===wb[0]){
+        if(wb.length===1)return true; // solo nombre → match por primer nombre
+        if(wa.length>=2&&wb.length>=2&&wa[1]===wb[1])return true; // nombre+apellido
+      }
+      return n.indexOf(bn)>=0; // fallback por substring
+    });
+  }
+  // Guardar blacklist en Supabase
+  function saveBlacklist(list){
+    setBlacklist(list);
+    dbSave("bonos_timp","client_blacklist",list).catch(function(){});
+  }
 
   function importCuotas(e){
     var file=e.target.files[0];
@@ -536,6 +576,17 @@ export default function App(){
         function isGroupHeader(txt){
           // Títulos como "Time dual - Time dual 2026-04-20/2026-04-26" son encabezados de grupo
           return /\d{4}-\d{2}-\d{2}/.test(txt) || /^Bonos?\s*-/i.test(txt);
+        }
+
+        // Intentar extraer la semana del Excel desde cualquier título con formato YYYY-MM-DD/YYYY-MM-DD
+        // Ejemplo: "Time dual - Time dual 2026-04-20/2026-04-26" → {inicio: 2026-04-20, fin: 2026-04-26}
+        var semanaExcel=null;
+        for(var iHdr=0;iHdr<Math.min(20,rows.length);iHdr++){
+          var rHdr=rows[iHdr];
+          if(!rHdr)continue;
+          var txtFull=rHdr.filter(function(x){return x!=null&&x!=="";}).join(" ");
+          var mFecha=txtFull.match(/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})/);
+          if(mFecha){semanaExcel=mFecha[1];break;}
         }
 
         // Recorremos el Excel identificando secciones
@@ -596,14 +647,53 @@ export default function App(){
             var fullName=((nombre||"")+" "+(apellidos||"")).trim();
             if(!fullName)continue;
 
+            // ══════════════════════════════════════════════════
+            //  EXCLUSIÓN: Gympass y blacklist no cuentan para renovaciones
+            // ══════════════════════════════════════════════════
+            var lowerName=fullName.toLowerCase();
+            if(lowerName.indexOf("gympass")>=0)continue;
+            if(isBlacklisted(fullName))continue;
+
+            // ══════════════════════════════════════════════════
+            //  CÁLCULO DE ESTADO DEL BONO (regla Jesús)
+            // ══════════════════════════════════════════════════
+            //  consumido = usadas + caducadas   (SOLO lo ya gastado)
+            //
+            //  "sinCanjear" NO cuenta: son sesiones FUTURAS ya reservadas
+            //  en semanas posteriores. Ej: Jimena tiene bono hasta junio con
+            //  19 "sin canjear" que son sus 2 sesiones/semana por delante.
+            //
+            //  "enUso" son reservas pendientes de hacer. Si enUso > 0, el
+            //  cliente AÚN tiene clases por delante en este bono → NO agotado.
+            //
+            //  Ejemplo Manuel: 10 total, 6 usadas, 3 en uso, 1 caducada.
+            //  cons = 6+1 = 7 < 10 → activo (correcto, le quedan 3 clases)
+            //
+            //  AGOTADO requiere: consumido >= total AND enUso == 0
+            var totalSes=+r[cTotal]||0;
+            var usadas=+r[cUsado]||0;
+            var sinCanj=+r[cSinCanj]||0;
+            var enUso=+r[cEnUso]||0;
+            var caduc=+r[cCaducado]||0;
+            var consumido=usadas+caduc;
+            var restante=totalSes-consumido;
+
+            var estadoBono;
+            if(totalSes>0 && consumido>=totalSes && enUso===0)estadoBono="agotado";
+            else estadoBono="activo";
+
             parsed.push({
               nombre:fullName,
               tipoBono:tipoBonoActual,
-              totalSesiones:+r[cTotal]||0,
-              usadas:+r[cUsado]||0,
-              sinCanjear:+r[cSinCanj]||0,
-              enUso:+r[cEnUso]||0,
-              caducadas:+r[cCaducado]||0,
+              totalSesiones:totalSes,
+              usadas:usadas,
+              sinCanjear:sinCanj,
+              enUso:enUso,
+              caducadas:caduc,
+              consumido:consumido,
+              restante:restante,
+              estadoBono:estadoBono,   // "agotado" | "activo"
+              semanaExcel:semanaExcel, // lunes de la semana del Excel (YYYY-MM-DD)
               fechaValor:r[cValor]||"",
               totalCobro:+r[cTotalCobro]||0,
               totalPagado:+r[cPagado]||0,
@@ -614,11 +704,27 @@ export default function App(){
 
         setCuotasExcel(parsed);
         dbSave("bonos_timp","cuotas_excel",parsed).catch(function(){});
-        // Agrupar por tipo para el mensaje al usuario
-        var porTipo={};
-        parsed.forEach(function(p){porTipo[p.tipoBono]=(porTipo[p.tipoBono]||0)+1;});
-        var msg="✅ "+parsed.length+" registros importados:\n";
+        // Agrupar por tipo y estado para el mensaje al usuario
+        var porTipo={},porEstado={agotado:0,activo:0};
+        parsed.forEach(function(p){
+          porTipo[p.tipoBono]=(porTipo[p.tipoBono]||0)+1;
+          porEstado[p.estadoBono]=(porEstado[p.estadoBono]||0)+1;
+        });
+        // Calcular la semana siguiente en formato legible
+        var semSig="(desconocida)";
+        if(semanaExcel){
+          var d=new Date(semanaExcel+"T00:00:00");
+          d.setDate(d.getDate()+7);
+          var y=d.getFullYear(),m=d.getMonth()+1,dd=d.getDate();
+          semSig=(dd<10?"0":"")+dd+"/"+(m<10?"0":"")+m+"/"+y;
+        }
+        var msg="✅ "+parsed.length+" registros importados\n";
+        if(semanaExcel)msg+="📅 Semana del Excel: "+semanaExcel+"\n\n";
+        msg+="Por tipo:\n";
         Object.keys(porTipo).forEach(function(t){msg+="• "+t+": "+porTipo[t]+"\n";});
+        msg+="\n🔴 Bonos AGOTADOS esta semana: "+porEstado.agotado+"\n";
+        msg+="→ Aparecerán en Renovaciones del "+semSig+"\n";
+        msg+="\n🟢 Aún con sesiones disponibles: "+porEstado.activo;
         alert(msg);
       }catch(err){alert("Error: "+err.message);}
     };
@@ -1100,6 +1206,8 @@ export default function App(){
     bonos={bonos}
     clients={cl}
     cuotasExcel={cuotasExcel}
+    blacklist={blacklist}
+    saveBlacklist={saveBlacklist}
     renData={renData}
     setRenData={setRenData}
     onSaveRenData={function(newData){
