@@ -479,15 +479,19 @@ export default function App(){
   // Import cuotas from TIMP Excel — se guarda aparte para sesiones consumidas
   var cuotasExcel_=_([]),cuotasExcel=cuotasExcel_[0],setCuotasExcel=cuotasExcel_[1];
 
+  // Reporte de Reservas de TIMP (sesiones realizadas/pendientes por cliente y fecha)
+  var reservasExcel_=_([]),reservasExcel=reservasExcel_[0],setReservasExcel=reservasExcel_[1];
+
   // Lista negra de clientes que nunca deben aparecer (Gympass sin marcar, ex-clientes, etc)
   var blacklist_=_([]),blacklist=blacklist_[0],setBlacklist=blacklist_[1];
 
-  // Load cuotas excel y blacklist desde Supabase on init
+  // Load cuotas excel, reservas excel y blacklist desde Supabase on init
   useEffect(function(){
     dbGet("bonos_timp").then(function(r){
       var blFound=false;
       if(r&&r.length>0){r.forEach(function(x){
         if(x.id==="cuotas_excel")setCuotasExcel(x.data);
+        if(x.id==="reservas_excel")setReservasExcel(x.data);
         if(x.id==="client_blacklist"){setBlacklist(x.data||[]);blFound=true;}
       });}
       // Si nunca se ha creado la blacklist, inicializar con los clientes Gympass conocidos
@@ -666,9 +670,6 @@ export default function App(){
             //  "enUso" son reservas pendientes de hacer. Si enUso > 0, el
             //  cliente AÚN tiene clases por delante en este bono → NO agotado.
             //
-            //  Ejemplo Manuel: 10 total, 6 usadas, 3 en uso, 1 caducada.
-            //  cons = 6+1 = 7 < 10 → activo (correcto, le quedan 3 clases)
-            //
             //  AGOTADO requiere: consumido >= total AND enUso == 0
             var totalSes=+r[cTotal]||0;
             var usadas=+r[cUsado]||0;
@@ -692,8 +693,8 @@ export default function App(){
               caducadas:caduc,
               consumido:consumido,
               restante:restante,
-              estadoBono:estadoBono,   // "agotado" | "activo"
-              semanaExcel:semanaExcel, // lunes de la semana del Excel (YYYY-MM-DD)
+              estadoBono:estadoBono,
+              semanaExcel:semanaExcel,
               fechaValor:r[cValor]||"",
               totalCobro:+r[cTotalCobro]||0,
               totalPagado:+r[cPagado]||0,
@@ -704,7 +705,6 @@ export default function App(){
 
         setCuotasExcel(parsed);
         dbSave("bonos_timp","cuotas_excel",parsed).catch(function(){});
-        // Agrupar por tipo y estado para el mensaje al usuario
         var porTipo={},porEstado={agotado:0,activo:0};
         parsed.forEach(function(p){
           porTipo[p.tipoBono]=(porTipo[p.tipoBono]||0)+1;
@@ -725,6 +725,98 @@ export default function App(){
         msg+="\n🔴 Bonos AGOTADOS esta semana: "+porEstado.agotado+"\n";
         msg+="→ Aparecerán en Renovaciones del "+semSig+"\n";
         msg+="\n🟢 Aún con sesiones disponibles: "+porEstado.activo;
+        alert(msg);
+      }catch(err){alert("Error: "+err.message);}
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value="";
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  IMPORTAR REPORTE DE RESERVAS de TIMP
+  // ══════════════════════════════════════════════════════════════════
+  // Se usa cada lunes junto con el Excel de Cuotas.
+  // Cubre desde 01/01/AAAA hasta el domingo de la semana del Excel de Cuotas.
+  // Para cada reserva guarda: nombre, venta (tipo bono), fecha, estado, canjeada.
+  // Luego en Renovaciones se cruza con los bonos de TIMP para contar sesiones reales.
+  function importReservas(e){
+    var file=e.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        var XLSX=window.XLSX||null;
+        if(!XLSX){alert("Cargando librería...");return;}
+        var wb=XLSX.read(ev.target.result,{type:"array",cellDates:false});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+
+        // La cabecera está en la fila 3 (índice 3): ID, Servicio, Recurso, Inicio, Fin, Cliente(ID)...
+        var hIdx=rows.findIndex(function(r){
+          return r && r.some && r.some(function(c){return c==="Cliente (nombre)";});
+        });
+        if(hIdx<0){alert("No se encontró la cabecera del reporte de Reservas");return;}
+
+        var header=rows[hIdx];
+        var col={};
+        for(var c=0;c<header.length;c++){if(header[c])col[header[c]]=c;}
+
+        var cServicio=col["Servicio"];
+        var cInicio=col["Inicio"];
+        var cNom=col["Cliente (nombre)"];
+        var cApe=col["Cliente (apellidos)"];
+        var cCanj=col["Canjeada"];
+        var cEstado=col["Estado de reserva"];
+        var cVenta=col["Venta"];
+        var cSesBono=col["Sesiones del bono"];
+
+        // Parsear fecha española "DD/MM/YYYY HH:mm" → ISO
+        function parseDate(s){
+          if(!s)return null;
+          if(typeof s!=="string")return null;
+          var m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+          if(!m)return null;
+          return m[3]+"-"+m[2]+"-"+m[1]+"T"+(m[4].length===1?"0":"")+m[4]+":"+m[5]+":00";
+        }
+
+        var parsed=[];
+        for(var i=hIdx+1;i<rows.length;i++){
+          var r=rows[i];
+          if(!r||!r[cNom])continue;
+          var servicio=r[cServicio]||"";
+          // Solo nos interesa Time dual (entrenamiento). Excluimos Fisio, Nutrición, etc.
+          if((""+servicio).toLowerCase().indexOf("time dual")<0)continue;
+
+          var fullName=((r[cNom]||"")+" "+(r[cApe]||"")).trim();
+          if(!fullName)continue;
+
+          var iso=parseDate(r[cInicio]);
+          if(!iso)continue; // sin fecha no sirve
+
+          parsed.push({
+            nombre:fullName,
+            inicio:iso,                    // ISO string
+            estado:r[cEstado]||"",         // "Aceptada" | "Cancelada" | "En cola"
+            canjeada:r[cCanj]||"",         // "Si" | "No" | "Regalada"
+            venta:r[cVenta]||"",           // "Time partner plus trimestral (Time dual)"...
+            sesionesBono:+r[cSesBono]||0
+          });
+        }
+
+        setReservasExcel(parsed);
+        dbSave("bonos_timp","reservas_excel",parsed).catch(function(){});
+
+        // Resumen
+        var total=parsed.length;
+        var aceptSi=parsed.filter(function(p){return p.estado==="Aceptada"&&p.canjeada==="Si";}).length;
+        var aceptNo=parsed.filter(function(p){return p.estado==="Aceptada"&&p.canjeada==="No";}).length;
+        var canceladas=parsed.filter(function(p){return p.estado==="Cancelada";}).length;
+        var msg="✅ "+total+" reservas importadas (Time dual)\n\n";
+        msg+="✅ Canjeadas (hechas): "+aceptSi+"\n";
+        msg+="⏳ Pendientes de canjeo: "+aceptNo+"\n";
+        msg+="❌ Canceladas: "+canceladas+"\n\n";
+        msg+="Esto mejora la detección de bonos agotados\n";
+        msg+="en Renovaciones cruzando con el Excel de Cuotas.";
         alert(msg);
       }catch(err){alert("Error: "+err.message);}
     };
@@ -1206,6 +1298,8 @@ export default function App(){
     bonos={bonos}
     clients={cl}
     cuotasExcel={cuotasExcel}
+    reservasExcel={reservasExcel}
+    importReservas={importReservas}
     blacklist={blacklist}
     saveBlacklist={saveBlacklist}
     renData={renData}
