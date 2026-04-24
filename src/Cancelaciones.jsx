@@ -46,7 +46,7 @@ export default function Cancelaciones(props) {
     // Fetch desde el lunes de esta semana para el reporte semanal
     var monday = getMonday(today);
     var from = localKey(monday);
-    var futureDate = new Date(today);
+    var futureDate = new Date(monday);
     futureDate.setDate(futureDate.getDate() + semanas * 7);
     var to = localKey(futureDate);
 
