@@ -91,6 +91,12 @@ export default function App(){
   var SYNC_INTERVAL_MS = 60 * 1000; // 60 segundos. Subir si hay problemas con TIMP.
   var syncInProgress_=_(false), syncInProgress=syncInProgress_[0], setSyncInProgress=syncInProgress_[1];
   var lastSyncAt_=_(null), lastSyncAt=lastSyncAt_[0], setLastSyncAt=lastSyncAt_[1];
+  // Tick cada 30s para refrescar el indicador "hace X segundos" en la UI
+  var clockTick_=_(0), clockTick=clockTick_[0], setClockTick=clockTick_[1];
+  useEffect(function(){
+    var i=setInterval(function(){setClockTick(function(t){return t+1;});},30000);
+    return function(){clearInterval(i);};
+  },[]);
 
   // Cargar cache local de TIMP al inicio (datos rápidos)
   useEffect(function(){
@@ -233,6 +239,25 @@ export default function App(){
   }
 
   // ══════════════════════════════════════════════════════════════════════
+  //  HELPER: Match por UUID con fallback a nombre.
+  //  Usar SIEMPRE este helper en lugar de matchesName cuando trabajemos
+  //  con clientes del CRM, para evitar confusiones por nombres similares.
+  //  - clientCrm: objeto cliente del CRM (con .name y opcional .timpUuid)
+  //  - other: { name?, full_name?, uuid?, timpUuid? } — TIMP, Excel, etc.
+  // ══════════════════════════════════════════════════════════════════════
+  function matchesClient(clientCrm, other){
+    if(!clientCrm||!other)return false;
+    // Match estricto por UUID si ambos lo tienen
+    var uuidA=clientCrm.timpUuid;
+    var uuidB=other.uuid||other.timpUuid;
+    if(uuidA&&uuidB)return uuidA===uuidB;
+    // Fallback a nombre
+    var nameA=clientCrm.name;
+    var nameB=other.name||other.full_name;
+    return matchesName(nameA,nameB);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
   //  HELPER: Paginación TIMP — recorre todas las páginas
   //  TIMP devuelve { collection: [...], ... } por página.
   //  Se detiene cuando: collection vacío, sin cambios, o hard cap.
@@ -273,8 +298,11 @@ export default function App(){
       // Update CRM clients with TIMP data
       setCl(function(prev){
         var updated=prev.map(function(c){
-          // Match seguro por nombre + 1er apellido (antes: indexOf = falsos positivos)
-          var match=subs.find(function(s){return matchesName(s.full_name,c.name);});
+          // Match prioritario: UUID si ya lo tenemos guardado (100% fiable).
+          // Fallback: nombre + 1er apellido (para clientes nuevos sin UUID asignado).
+          var match=null;
+          if(c.timpUuid){match=subs.find(function(s){return s.uuid===c.timpUuid;});}
+          if(!match){match=subs.find(function(s){return matchesName(s.full_name,c.name);});}
           if(match){
             var upd=Object.assign({},c);
             upd.timpUuid=match.uuid;
@@ -347,8 +375,11 @@ export default function App(){
           var haComprado=bonos.some(function(b){return b.suscriptionUuid===s.uuid;});
           if(!haComprado)return false;
           if(!tieneBono&&!tieneBonoFuturo)return false;
-          // Match seguro: no dar de alta si ya existe un cliente con el mismo nombre+apellido
-          return !updated.some(function(c){return matchesName(c.name,s.full_name);});
+          // Match seguro: no dar de alta si ya existe cliente con mismo UUID O mismo nombre
+          return !updated.some(function(c){
+            if(c.timpUuid&&c.timpUuid===s.uuid)return true;
+            return matchesName(c.name,s.full_name);
+          });
         });
         newFromTimp.forEach(function(s){
           var nc={
@@ -1235,6 +1266,14 @@ export default function App(){
       <span style={{fontSize:16,fontWeight:800,color:dk?"#e2e8f0":"#fff"}}>T2Tcrm</span>
     </div>
     <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      {/* Indicador última actualización */}
+      {lastSyncAt&&(function(){
+        var secs=Math.floor((Date.now()-lastSyncAt.getTime())/1000);
+        var mins=Math.floor(secs/60);
+        var stale=secs>5*60; // >5min = datos antiguos
+        var label=secs<60?"hace "+secs+"s":mins<60?"hace "+mins+"min":"hace "+Math.floor(mins/60)+"h";
+        return <span style={{fontSize:10,color:stale?"#fbbf24":(dk?"#94a3b8":"rgba(255,255,255,.7)"),fontWeight:600,padding:"4px 8px",borderRadius:6,background:stale?"rgba(251,191,36,.15)":"transparent",border:stale?"1px solid rgba(251,191,36,.4)":"none",whiteSpace:"nowrap"}} title={"Última sincronización: "+lastSyncAt.toLocaleString("es-ES")}>{stale?"⚠️ ":"✓ "}{label}</span>;
+      })()}
       <button onClick={refreshAll} title={timpSyncing?"Sincronizando...":"Refrescar TODO el CRM"} disabled={timpSyncing} style={{width:36,height:36,borderRadius:9,background:timpSyncing?"rgba(34,197,94,.2)":(dk?"#2d3660":"rgba(255,255,255,.15)"),border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:timpSyncing?"wait":"pointer",fontSize:16,position:"relative"}}>
         <span style={{display:"inline-block",animation:timpSyncing?"spin 1s linear infinite":"none"}}>🔄</span>
       </button>
