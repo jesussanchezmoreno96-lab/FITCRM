@@ -91,6 +91,13 @@ export default function App(){
 
   // Cargar cache local de TIMP al inicio (datos rápidos)
   useEffect(function(){
+    // Inyectar animación spin para el botón refrescar
+    if(!document.getElementById("t2t-spin-anim")){
+      var st=document.createElement("style");
+      st.id="t2t-spin-anim";
+      st.innerHTML="@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}";
+      document.head.appendChild(st);
+    }
     try{
       var cached=localStorage.getItem("t2tcrm_timp_cache");
       if(cached){
@@ -1191,7 +1198,10 @@ export default function App(){
       <img src="/logo.png" alt="time2train" style={{height:24,filter:"brightness(0) invert(1)"}}/>
       <span style={{fontSize:16,fontWeight:800,color:dk?"#e2e8f0":"#fff"}}>T2Tcrm</span>
     </div>
-    <div style={{display:"flex",gap:8}}>
+    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      <button onClick={function(){syncTimpSafe();syncBonos();}} title={timpSyncing?"Sincronizando...":"Refrescar datos de TIMP"} disabled={timpSyncing} style={{width:36,height:36,borderRadius:9,background:timpSyncing?"rgba(34,197,94,.2)":(dk?"#2d3660":"rgba(255,255,255,.15)"),border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:timpSyncing?"wait":"pointer",fontSize:16,position:"relative"}}>
+        <span style={{display:"inline-block",animation:timpSyncing?"spin 1s linear infinite":"none"}}>🔄</span>
+      </button>
       <button onClick={function(){setTheme(dk?"light":"dark");}} style={{width:36,height:36,borderRadius:9,background:dk?"#2d3660":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>{dk?"☀️":"🌙"}</button>
       <button onClick={function(){setMv("seguimiento");}} style={{position:"relative",width:36,height:36,borderRadius:9,background:pc>0?"rgba(245,158,11,.1)":dk?"#2d3660":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>🔔{pc>0&&<span style={{position:"absolute",top:-4,right:-4,width:16,height:16,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{pc}</span>}</button>
       <button onClick={function(){setFm({});setSA(true);}} style={{padding:"8px 16px",background:dk?"linear-gradient(135deg,#394265,#4a5580)":"rgba(255,255,255,.2)",border:"none",borderRadius:9,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Cliente</button>
