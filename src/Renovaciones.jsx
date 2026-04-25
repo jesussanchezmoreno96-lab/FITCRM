@@ -736,7 +736,7 @@ export default function Renovaciones(props) {
         var isSegundoPago = r.source === "segundo_pago";
 
         return <div key={i} style={{
-          padding: "4px 12px", borderBottom: "1px solid " + T.border,
+          padding: "4px 12px", borderBottom: "1.5px solid " + (dk ? "rgba(255,255,255,.20)" : "rgba(0,0,0,.18)"),
           background: rowBg, opacity: isBaja ? 0.6 : 1
         }}>
           {/* Row: name + price + status */}
