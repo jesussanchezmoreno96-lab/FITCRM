@@ -133,6 +133,33 @@ export default function App(){
     syncTimp();
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  REFRESH COMPLETO: actualiza todo de un golpe
+  //  - TIMP API (subscriptions, autopurchases, purchases)
+  //  - Datos persistidos en Supabase (clients, leads, followups, fisio, bonos_timp)
+  //  - Cancelaciones (a través del refreshTrigger contador)
+  // ══════════════════════════════════════════════════════════════════════
+  var refreshTrigger_=_(0), refreshTrigger=refreshTrigger_[0], setRefreshTrigger=refreshTrigger_[1];
+  function refreshAll(){
+    syncTimpSafe();
+    syncBonos();
+    // Recargar datos persistidos por si Miguel u otra sesión los modificó
+    dbGet("clients").then(function(r){if(r&&r.length>0)setCl(r.map(function(x){return x.data;}));}).catch(function(){});
+    dbGet("followups").then(function(r){if(r&&r.length>0)setFu(r.map(function(x){return x.data;}));}).catch(function(){});
+    dbGet("leads").then(function(r){if(r&&r.length>0)setLe(r.map(function(x){return x.data;}));}).catch(function(){});
+    dbGet("fisio_reports").then(function(r){if(r&&r.length>0)setFis(r.map(function(x){return x.data;}));}).catch(function(){});
+    dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){
+      if(x.id==="cuotas_vigentes")setBonos(x.data);
+      if(x.id==="renovacion_ticks")setRenTicks(x.data);
+      if(x.id==="renovacion_data")setRenData(x.data);
+      if(x.id==="cuotas_excel")setCuotasExcel(x.data);
+      if(x.id==="reservas_excel")setReservasExcel(x.data);
+      if(x.id==="client_blacklist")setBlacklist(x.data||[]);
+    });}}).catch(function(){});
+    // Trigger refresh de Cancelaciones
+    setRefreshTrigger(function(t){return t+1;});
+  }
+
   function saveClient(c){dbSave("clients",c.id,c).catch(function(){});}
   function deleteClient(id){dbDel("clients",id).catch(function(){});}
   function saveFu(f){dbSave("followups",f.id,f).catch(function(){});}
@@ -1085,7 +1112,7 @@ export default function App(){
         <div style={{textAlign:"center",marginTop:8}}>
           {timpSyncing&&<div style={{fontSize:10,color:T.text3}}>🔄 Sincronizando...</div>}
           {timpData&&!timpSyncing&&<div style={{fontSize:9,color:"#22c55e"}}>✓ TIMP sync — {timpData.filter(function(s){return s.active_membership;}).length} activos {timpLast?" · "+timpLast:""}</div>}
-          {timpData&&!timpSyncing&&<button onClick={function(){syncTimpSafe();syncBonos();}} title="Refrescar ahora" style={{marginTop:4,padding:"4px 10px",background:"transparent",border:"1px solid "+T.border2,borderRadius:6,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>🔄 Refrescar</button>}
+          {timpData&&!timpSyncing&&<button onClick={refreshAll} title="Refrescar ahora" style={{marginTop:4,padding:"4px 10px",background:"transparent",border:"1px solid "+T.border2,borderRadius:6,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>🔄 Refrescar</button>}
           {!timpData&&!timpSyncing&&<button onClick={syncTimpSafe} style={{padding:"6px 16px",background:"#394265",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar TIMP</button>}
         </div>
       </div>
@@ -1208,7 +1235,7 @@ export default function App(){
       <span style={{fontSize:16,fontWeight:800,color:dk?"#e2e8f0":"#fff"}}>T2Tcrm</span>
     </div>
     <div style={{display:"flex",gap:8,alignItems:"center"}}>
-      <button onClick={function(){syncTimpSafe();syncBonos();}} title={timpSyncing?"Sincronizando...":"Refrescar datos de TIMP"} disabled={timpSyncing} style={{width:36,height:36,borderRadius:9,background:timpSyncing?"rgba(34,197,94,.2)":(dk?"#2d3660":"rgba(255,255,255,.15)"),border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:timpSyncing?"wait":"pointer",fontSize:16,position:"relative"}}>
+      <button onClick={refreshAll} title={timpSyncing?"Sincronizando...":"Refrescar TODO el CRM"} disabled={timpSyncing} style={{width:36,height:36,borderRadius:9,background:timpSyncing?"rgba(34,197,94,.2)":(dk?"#2d3660":"rgba(255,255,255,.15)"),border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:timpSyncing?"wait":"pointer",fontSize:16,position:"relative"}}>
         <span style={{display:"inline-block",animation:timpSyncing?"spin 1s linear infinite":"none"}}>🔄</span>
       </button>
       <button onClick={function(){setTheme(dk?"light":"dark");}} style={{width:36,height:36,borderRadius:9,background:dk?"#2d3660":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>{dk?"☀️":"🌙"}</button>
@@ -1404,6 +1431,7 @@ export default function App(){
   {mv==="cancelaciones"&&<Cancelaciones
     theme={T}
     dk={dk}
+    refreshTrigger={refreshTrigger}
   />}
 
   {mv==="horarios"&&<div>
