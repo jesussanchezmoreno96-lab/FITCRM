@@ -79,10 +79,49 @@ export default function App(){
     dbGet("bonos_timp").then(function(r){if(r&&r.length>0){r.forEach(function(x){if(x.id==="cuotas_vigentes")setBonos(x.data);if(x.id==="renovacion_ticks")setRenTicks(x.data);if(x.id==="renovacion_data")setRenData(x.data);});}}).catch(function(){});
   },[]);
 
-  // Auto-sync TIMP when clients are loaded
+  // ══════════════════════════════════════════════════════════════════════
+  //  CACHE LOCAL + AUTO-SYNC
+  //  Mejora 1: cache → CRM abre con datos viejos al instante
+  //  Mejora 3: bandera "ya sincronizando" → evita llamadas duplicadas
+  //  Mejora 5: auto-sync cada 60 segundos
+  // ══════════════════════════════════════════════════════════════════════
+  var SYNC_INTERVAL_MS = 60 * 1000; // 60 segundos. Subir si hay problemas con TIMP.
+  var syncInProgress_=_(false), syncInProgress=syncInProgress_[0], setSyncInProgress=syncInProgress_[1];
+  var lastSyncAt_=_(null), lastSyncAt=lastSyncAt_[0], setLastSyncAt=lastSyncAt_[1];
+
+  // Cargar cache local de TIMP al inicio (datos rápidos)
   useEffect(function(){
-    if(ld&&cl.length>0&&!timpData){syncTimp();}
+    try{
+      var cached=localStorage.getItem("t2tcrm_timp_cache");
+      if(cached){
+        var data=JSON.parse(cached);
+        if(data.subs&&Array.isArray(data.subs))setTimpData(data.subs);
+        if(data.lastSync)setTimpLast(data.lastSync);
+        if(data.lastSyncAt)setLastSyncAt(new Date(data.lastSyncAt));
+      }
+    }catch(e){console.warn("[cache] No se pudo cargar cache local:",e);}
+  },[]);
+
+  // Auto-sync TIMP when clients are loaded (primera vez)
+  useEffect(function(){
+    if(ld&&cl.length>0&&!timpData){syncTimpSafe();}
   },[ld]);
+
+  // Auto-sync cada 60 segundos mientras el CRM esté abierto
+  useEffect(function(){
+    if(!ld)return;
+    var interval=setInterval(function(){
+      if(!syncInProgress&&cl.length>0){syncTimpSafe();syncBonos();}
+    },SYNC_INTERVAL_MS);
+    return function(){clearInterval(interval);};
+  },[ld,cl.length,syncInProgress]);
+
+  // Wrapper seguro de syncTimp con bandera anti-duplicados
+  function syncTimpSafe(){
+    if(syncInProgress){console.log("[sync] Ya hay un sync en curso, ignoro");return;}
+    setSyncInProgress(true);
+    syncTimp();
+  }
 
   function saveClient(c){dbSave("clients",c.id,c).catch(function(){});}
   function deleteClient(id){dbDel("clients",id).catch(function(){});}
@@ -299,7 +338,18 @@ export default function App(){
         return updated;
       });
       setTimpSyncing(false);
-    }).catch(function(err){console.error("[syncTimp] Error:",err);setTimpSyncing(false);});
+      setSyncInProgress(false);
+      var nowDate=new Date();
+      setLastSyncAt(nowDate);
+      // Guardar cache local para próxima carga rápida
+      try{
+        localStorage.setItem("t2tcrm_timp_cache",JSON.stringify({
+          subs:subs,
+          lastSync:nowDate.toLocaleString("es-ES"),
+          lastSyncAt:nowDate.toISOString()
+        }));
+      }catch(e){console.warn("[cache] No se pudo guardar cache local:",e);}
+    }).catch(function(err){console.error("[syncTimp] Error:",err);setTimpSyncing(false);setSyncInProgress(false);});
   }
 
   // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
@@ -1022,8 +1072,9 @@ export default function App(){
         {/* TIMP Sync status */}
         <div style={{textAlign:"center",marginTop:8}}>
           {timpSyncing&&<div style={{fontSize:10,color:T.text3}}>🔄 Sincronizando...</div>}
-          {timpData&&<div style={{fontSize:9,color:"#22c55e"}}>✓ TIMP sync — {timpData.filter(function(s){return s.active_membership;}).length} activos {timpLast?" · "+timpLast:""}</div>}
-          {!timpData&&!timpSyncing&&<button onClick={syncTimp} style={{padding:"6px 16px",background:"#394265",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar TIMP</button>}
+          {timpData&&!timpSyncing&&<div style={{fontSize:9,color:"#22c55e"}}>✓ TIMP sync — {timpData.filter(function(s){return s.active_membership;}).length} activos {timpLast?" · "+timpLast:""}</div>}
+          {timpData&&!timpSyncing&&<button onClick={function(){syncTimpSafe();syncBonos();}} title="Refrescar ahora" style={{marginTop:4,padding:"4px 10px",background:"transparent",border:"1px solid "+T.border2,borderRadius:6,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>🔄 Refrescar</button>}
+          {!timpData&&!timpSyncing&&<button onClick={syncTimpSafe} style={{padding:"6px 16px",background:"#394265",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar TIMP</button>}
         </div>
       </div>
     </div>
