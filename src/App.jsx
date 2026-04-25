@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
-import Horarios from "./Horarios.jsx";
-import AIAssistant from "./AIAssistant.jsx";
-import Dashboard from "./Dashboard.jsx";
-import Renovaciones from "./Renovaciones.jsx";
-import Pagos from "./Pagos.jsx";
-import Cancelaciones from "./Cancelaciones.jsx";
+import { useState, useEffect, lazy, Suspense } from "react";
+// Lazy loading: cada componente se carga solo cuando se entra en él.
+// Esto reduce el tamaño inicial del JS y hace la primera carga mucho más rápida.
+// Una vez cargado, queda en memoria y los cambios entre secciones son instantáneos.
+const Horarios = lazy(() => import("./Horarios.jsx"));
+const AIAssistant = lazy(() => import("./AIAssistant.jsx"));
+const Dashboard = lazy(() => import("./Dashboard.jsx"));
+const Renovaciones = lazy(() => import("./Renovaciones.jsx"));
+const Pagos = lazy(() => import("./Pagos.jsx"));
+const Cancelaciones = lazy(() => import("./Cancelaciones.jsx"));
 
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -962,6 +965,7 @@ export default function App(){
 
         {/* AI Chat inline */}
         {homeAI&&<div style={{marginBottom:24}}>
+          <Suspense fallback={<div style={{padding:30,textAlign:"center",color:T.text3,fontSize:13}}>⏳ Cargando asistente...</div>}>
           <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} inline={true} onClose={function(){setHomeAI(false);}} actions={{
             navigate:function(section,subview){setSec(section);if(subview)setMv(subview);setHomeAI(false);},
             selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");setHomeAI(false);},
@@ -971,6 +975,7 @@ export default function App(){
             changeRenovacion:changeRenovacion,
             moveRenovacion:moveRenovacion
           }}/>
+          </Suspense>
         </div>}
 
         {/* ═══ 3 MÓDULOS PRINCIPALES ═══ */}
@@ -1100,8 +1105,11 @@ export default function App(){
         </div>
       </div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:20}}>
-        <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis} timpData={timpData} bonos={bonos}/>
+        <Suspense fallback={<div style={{padding:40,textAlign:"center",color:T.text3,fontSize:13}}>⏳ Cargando dashboard...</div>}>
+          <Dashboard theme={T} dk={dk} clients={cl} leads={le} followups={fu} fisio={fis} timpData={timpData} bonos={bonos}/>
+        </Suspense>
       </div>
+      <Suspense fallback={null}>
       <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} actions={{
         navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
         selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
@@ -1109,6 +1117,7 @@ export default function App(){
         createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
         changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});}
       }}/>
+      </Suspense>
     </div>
   );
 
@@ -1353,6 +1362,9 @@ export default function App(){
   </div>}
 
 
+  {/* Suspense para lazy loading: muestra un spinner mientras carga el chunk del componente */}
+  <Suspense fallback={<div style={{padding:40,textAlign:"center",color:T.text3,fontSize:13}}>⏳ Cargando...</div>}>
+
   {mv==="renovaciones"&&<Renovaciones
     theme={T}
     dk={dk}
@@ -1399,6 +1411,8 @@ export default function App(){
     <Horarios theme={T} dk={dk}/>
   </div>}
 
+  </Suspense>
+
   </div>
 
   {/* MODALS */}
@@ -1410,6 +1424,7 @@ export default function App(){
 
   {sL&&<div onClick={function(){setSL(false);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}><div onClick={function(e){e.stopPropagation();}} style={{background:T.bg2,borderRadius:16,padding:24,width:"90%",maxWidth:460,border:"1px solid "+T.border2,maxHeight:"90vh",overflowY:"auto"}}><h2 style={{margin:"0 0 14px",fontSize:17,fontWeight:700}}>🎯 Nuevo Lead</h2><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>NOMBRE</label><input value={lf.name} onChange={function(e){setLf(Object.assign({},lf,{name:e.target.value}));}} style={iS}/></div><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>TELÉFONO</label><input value={lf.phone} onChange={function(e){setLf(Object.assign({},lf,{phone:e.target.value}));}} style={iS}/></div><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>ORIGEN</label><input value={lf.source} onChange={function(e){setLf(Object.assign({},lf,{source:e.target.value}));}} placeholder="Instagram, calle..." style={iS}/></div><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>FECHA DE CONTACTO</label><input type="date" value={lf.contactDate||""} onChange={function(e){setLf(Object.assign({},lf,{contactDate:e.target.value}));}} style={iS}/></div><div style={{display:"flex",gap:6,marginBottom:10}}><div style={{flex:1}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>MES</label><select value={lf.month||""} onChange={function(e){setLf(Object.assign({},lf,{month:e.target.value}));}} style={iS}>{["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map(function(m){return<option key={m} value={m}>{m}</option>;})}</select></div><div style={{flex:1}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>AÑO</label><select value={lf.year||""} onChange={function(e){setLf(Object.assign({},lf,{year:e.target.value}));}} style={iS}>{["2025","2026","2027"].map(function(y){return<option key={y} value={y}>{y}</option>;})}</select></div></div><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>ESTADO DE VENTA</label><select value={lf.status} onChange={function(e){setLf(Object.assign({},lf,{status:e.target.value}));}} style={iS}>{LS.map(function(x){return<option key={x.v} value={x.v}>{x.i} {x.l}</option>;})}</select></div><div style={{marginBottom:10}}><label style={{fontSize:11,color:"#8892a4",display:"block",marginBottom:4,fontWeight:600}}>INTERÉS</label><input value={lf.interest} onChange={function(e){setLf(Object.assign({},lf,{interest:e.target.value}));}} placeholder="Perder peso..." style={iS}/></div><div style={{display:"flex",gap:8}}><button onClick={function(){setSL(false);}} style={{flex:1,padding:10,background:"#2d3660",border:"1px solid "+T.border2,borderRadius:9,color:T.text2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancelar</button><button onClick={function(){if(!lf.name)return;var nl=Object.assign({id:gid()},lf);setLe(function(p){return p.concat([nl]);});saveLead(nl);setSL(false);}} style={{flex:1,padding:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:9,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Añadir</button></div></div></div>}
 
+  <Suspense fallback={null}>
   <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} actions={{
     navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
     selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
@@ -1419,6 +1434,7 @@ export default function App(){
     changeRenovacion:changeRenovacion,
     moveRenovacion:moveRenovacion
   }}/>
+  </Suspense>
 
   </div>);
 }
