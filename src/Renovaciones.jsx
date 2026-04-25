@@ -721,10 +721,11 @@ export default function Renovaciones(props) {
         var isEditingNote = editNote === noteKey;
 
         var rowBg = "transparent";
-        if (isBaja) rowBg = dk ? "rgba(239,68,68,.04)" : "#fef2f2";
-        if (isRenovado) rowBg = dk ? "rgba(34,197,94,.04)" : "#f0fdf4";
-        if (isMitad) rowBg = dk ? "rgba(99,102,241,.04)" : "#f0f0ff";
-        if (isReserva) rowBg = dk ? "rgba(6,182,212,.04)" : "#f0fdfa";
+        if (isBaja) rowBg = dk ? "rgba(239,68,68,.13)" : "rgba(239,68,68,.13)";
+        if (isPending) rowBg = dk ? "rgba(245,158,11,.16)" : "rgba(245,158,11,.16)";
+        if (isRenovado) rowBg = dk ? "rgba(34,197,94,.18)" : "rgba(34,197,94,.18)";
+        if (isMitad) rowBg = dk ? "rgba(99,102,241,.24)" : "rgba(99,102,241,.24)";
+        if (isReserva) rowBg = dk ? "rgba(6,182,212,.16)" : "rgba(6,182,212,.16)";
 
         // Status color
         var stColor = isRenovado ? "#22c55e" : isReserva ? "#06b6d4" : isMitad ? "#6366f1" : isBaja ? "#ef4444" : "#f59e0b";
@@ -735,28 +736,29 @@ export default function Renovaciones(props) {
         var isSegundoPago = r.source === "segundo_pago";
 
         return <div key={i} style={{
-          padding: "8px 16px", borderBottom: "1px solid " + T.border,
-          background: rowBg, opacity: isBaja ? 0.5 : 1
+          padding: "4px 12px", borderBottom: "1px solid " + T.border,
+          background: rowBg, opacity: isBaja ? 0.6 : 1
         }}>
           {/* Row: name + price + status */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
             {/* Name + price */}
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <div style={{
-                fontSize: 13, fontWeight: 700, color: T.text,
+                fontSize: 12, fontWeight: 700, color: T.text,
                 textDecoration: isBaja ? "line-through" : "none"
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 14, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
-              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 {Math.round(r.importePagado)}€ pagado de {r.precio}€</span>}
-              {r.source === "calculado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
-              {isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
-              {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Pago fraccionado</span>}
-              {isReserva && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>🔒 Reserva</span>}
-              {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
-              {r.source === "agotado" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Bono agotado ({r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total})</span>}
-              {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>⚠️ Última sesión ({r.sesiones.restantes} de {r.sesiones.total})</span>}
-              {r.source === "arrastre_impago" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚠️ Impago desde {r.originalWeek}</span>}
+              <span style={{ fontSize: 12, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
+              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 {Math.round(r.importePagado)}€/{r.precio}€</span>}
+              {r.source === "calculado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
+              {isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
+              {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Fraccionado</span>}
+              {isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>🔒 Reserva</span>}
+              {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
+              {r.source === "agotado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ {r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total}</span>}
+              {r.source === "agotado_excel" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Agotado</span>}
+              {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>⚠️ {r.sesiones.restantes}/{r.sesiones.total}</span>}
+              {r.source === "arrastre_impago" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚠️ Impago {r.originalWeek}</span>}
             </div>
 
             {/* STATUS — big select */}
@@ -805,11 +807,11 @@ export default function Renovaciones(props) {
               }}
               disabled={r.pagado}
               style={{
-                padding: "6px 10px", borderRadius: 7, fontSize: 11, fontWeight: 800,
+                padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 800,
                 outline: "none", cursor: r.pagado ? "default" : "pointer",
-                border: "1.5px solid " + stBorder,
+                border: "1px solid " + stBorder,
                 background: stBg, color: stColor,
-                minWidth: 130, flexShrink: 0
+                minWidth: 110, flexShrink: 0
               }}
             >
               <option value="pendiente">⏳ Pendiente</option>
@@ -823,11 +825,11 @@ export default function Renovaciones(props) {
             <button onClick={function () { upd(r.nombre, selWeek.key, "avisado", !data.avisado); }}
               title="Avisado"
               style={{
-                width: 26, height: 26, borderRadius: 6,
-                border: data.avisado ? "1.5px solid #3b82f6" : "1.5px solid " + T.border2,
+                width: 22, height: 22, borderRadius: 5,
+                border: data.avisado ? "1px solid #3b82f6" : "1px solid " + T.border2,
                 background: data.avisado ? "#3b82f615" : "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: 11, color: data.avisado ? "#3b82f6" : T.text3,
+                cursor: "pointer", fontSize: 10, color: data.avisado ? "#3b82f6" : T.text3,
                 padding: 0, flexShrink: 0
               }}>{data.avisado ? "✓" : "📢"}</button>
 
@@ -835,11 +837,11 @@ export default function Renovaciones(props) {
             <button onClick={function () { setMoveClient(r); setMoveTarget(""); }}
               title="Mover a otra semana"
               style={{
-                width: 26, height: 26, borderRadius: 6,
-                border: "1.5px solid " + T.border2,
+                width: 22, height: 22, borderRadius: 5,
+                border: "1px solid " + T.border2,
                 background: "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: 11, color: T.text3,
+                cursor: "pointer", fontSize: 10, color: T.text3,
                 padding: 0, flexShrink: 0
               }}>📅</button>
           </div>
