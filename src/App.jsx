@@ -13,6 +13,8 @@ var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
 
 function dbGet(t){return fetch(SUPA_URL+"/rest/v1/"+t+"?select=*",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}}).then(function(r){return r.json();});}
+// Fetch puntual de un único registro (para auto-refresh al abrir fichas)
+function dbGetOne(t,id){return fetch(SUPA_URL+"/rest/v1/"+t+"?id=eq."+encodeURIComponent(id)+"&select=*",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}}).then(function(r){return r.json();}).then(function(rows){return rows&&rows[0]?rows[0]:null;});}
 function dbSave(t,id,d){return fetch(SUPA_URL+"/rest/v1/"+t,{method:"POST",headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({id:id,data:d,updated_at:new Date().toISOString()})});}
 function dbDel(t,id){return fetch(SUPA_URL+"/rest/v1/"+t+"?id=eq."+id,{method:"DELETE",headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}});}
 
@@ -239,7 +241,30 @@ export default function App(){
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  HELPER: Match por UUID con fallback a nombre.
+  //  HELPER: openClient — abre la ficha de un cliente con auto-refresh
+  //  Antes de mostrar el modal, pide la última versión a Supabase para que
+  //  veas los cambios que Miguel haya hecho recientemente. Reduce conflictos.
+  // ══════════════════════════════════════════════════════════════════════
+  function openClient(c){
+    if(!c){setSel(null);return;}
+    // Mostrar inmediatamente con datos en memoria (rápido)
+    setSel(c);
+    // En paralelo, traer la versión más reciente desde Supabase
+    dbGetOne("clients",c.id).then(function(row){
+      if(!row||!row.data)return;
+      var fresh=row.data;
+      // Si hay cambios respecto a lo que tenemos en memoria, actualizar
+      var hasChanges=JSON.stringify(fresh)!==JSON.stringify(c);
+      if(hasChanges){
+        // Actualizar lista global
+        setCl(function(prev){return prev.map(function(x){return x.id===fresh.id?fresh:x;});});
+        // Actualizar el sel solo si todavía está abierto este cliente
+        setSel(function(s){return (s&&s.id===fresh.id)?fresh:s;});
+        console.log("[openClient] Datos refrescados desde Supabase para "+fresh.name);
+      }
+    }).catch(function(err){console.warn("[openClient] No se pudo refrescar:",err);});
+  }
+
   //  Usar SIEMPRE este helper en lugar de matchesName cuando trabajemos
   //  con clientes del CRM, para evitar confusiones por nombres similares.
   //  - clientCrm: objeto cliente del CRM (con .name y opcional .timpUuid)
@@ -1026,7 +1051,7 @@ export default function App(){
           <Suspense fallback={<div style={{padding:30,textAlign:"center",color:T.text3,fontSize:13}}>⏳ Cargando asistente...</div>}>
           <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} inline={true} onClose={function(){setHomeAI(false);}} actions={{
             navigate:function(section,subview){setSec(section);if(subview)setMv(subview);setHomeAI(false);},
-            selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");setHomeAI(false);},
+            selectClient:function(c){openClient(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");setHomeAI(false);},
             createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
             createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
             changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
@@ -1170,7 +1195,7 @@ export default function App(){
       <Suspense fallback={null}>
       <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} actions={{
         navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
-        selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
+        selectClient:function(c){openClient(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
         createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
         createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
         changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});}
@@ -1302,7 +1327,7 @@ export default function App(){
       <input placeholder="🔍 Buscar cliente..." value={sr} onChange={function(e){setSr(e.target.value);}} style={{width:"100%",padding:"11px 16px",background:T.bg3,border:"1px solid "+T.border2,borderRadius:10,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
     </div>
     <div style={{display:"flex",gap:6,marginBottom:16}}>{[["todos","Todos",cn.t],["activo","Activos",cn.a],["pausado","Pausados",cn.p],["baja","Baja",cn.b]].map(function(x){return<button key={x[0]} onClick={function(){setFs(x[0]);}} style={{padding:"7px 14px",borderRadius:9,border:fs===x[0]?"1px solid #6366f1":"1px solid #3a4570",background:fs===x[0]?"rgba(99,102,241,.1)":"transparent",color:fs===x[0]?"#e2e8f0":"#64748b",fontSize:11,fontWeight:600,cursor:"pointer"}}>{x[1]}({x[2]})</button>;})}</div>
-    <div style={B}>{(function(){var ls=cl;if(fs!=="todos")ls=ls.filter(function(c){return c.status===fs;});if(sr.trim())ls=ls.filter(function(c){return c.name&&c.name.toLowerCase().indexOf(sr.toLowerCase())>=0;});if(!ls.length)return<div style={{padding:40,textAlign:"center",color:"#475569"}}>Sin clientes</div>;return ls.map(function(c){var s=ST[c.status]||ST.activo;return<div key={c.id} onClick={function(){setSel(c);setTab("perfil");setMv("clientes");}} style={{padding:"16px 20px",borderBottom:"1px solid #2d3660",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}><div style={{width:36,height:36,borderRadius:9,background:s.c+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:s.c}}>{ini(c)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div><div style={{fontSize:10,color:"#64748b"}}>{c.objective}</div></div><select value={c.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){var v=e.target.value;sv(function(p){return p.map(function(x){return x.id===c.id?Object.assign({},x,{status:v}):x;});});}} style={{padding:"4px 8px",background:s.c+"10",border:"1px solid "+s.c+"25",borderRadius:7,color:s.c,fontSize:10,fontWeight:600,outline:"none"}}>{Object.entries(ST).map(function(e){return<option key={e[0]} value={e[0]}>{e[1].l}</option>;})}</select><button onClick={function(e){e.stopPropagation();if(confirm("¿Eliminar DEFINITIVAMENTE a "+c.name+"?")){setCl(function(p){return p.filter(function(x){return x.id!==c.id;});});deleteClient(c.id);if(sel&&sel.id===c.id)setSel(null);}}} style={{padding:"6px 10px",background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontWeight:600,flexShrink:0}}>🗑️</button></div>;});})()}</div>
+    <div style={B}>{(function(){var ls=cl;if(fs!=="todos")ls=ls.filter(function(c){return c.status===fs;});if(sr.trim())ls=ls.filter(function(c){return c.name&&c.name.toLowerCase().indexOf(sr.toLowerCase())>=0;});if(!ls.length)return<div style={{padding:40,textAlign:"center",color:"#475569"}}>Sin clientes</div>;return ls.map(function(c){var s=ST[c.status]||ST.activo;return<div key={c.id} onClick={function(){openClient(c);setTab("perfil");setMv("clientes");}} style={{padding:"16px 20px",borderBottom:"1px solid #2d3660",display:"flex",alignItems:"center",gap:14,cursor:"pointer"}}><div style={{width:36,height:36,borderRadius:9,background:s.c+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:s.c}}>{ini(c)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div><div style={{fontSize:10,color:"#64748b"}}>{c.objective}</div></div><select value={c.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){var v=e.target.value;sv(function(p){return p.map(function(x){return x.id===c.id?Object.assign({},x,{status:v}):x;});});}} style={{padding:"4px 8px",background:s.c+"10",border:"1px solid "+s.c+"25",borderRadius:7,color:s.c,fontSize:10,fontWeight:600,outline:"none"}}>{Object.entries(ST).map(function(e){return<option key={e[0]} value={e[0]}>{e[1].l}</option>;})}</select><button onClick={function(e){e.stopPropagation();if(confirm("¿Eliminar DEFINITIVAMENTE a "+c.name+"?")){setCl(function(p){return p.filter(function(x){return x.id!==c.id;});});deleteClient(c.id);if(sel&&sel.id===c.id)setSel(null);}}} style={{padding:"6px 10px",background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontWeight:600,flexShrink:0}}>🗑️</button></div>;});})()}</div>
   </div>}
 
   {mv==="clientes"&&<div>
@@ -1310,7 +1335,7 @@ export default function App(){
       <input placeholder="🔍 Buscar cliente..." value={sr} onChange={function(e){setSr(e.target.value);}} style={Object.assign({},iS,{padding:"11px 14px"})}/>
       {sr.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,marginTop:4,background:T.bg2,borderRadius:11,border:"1px solid "+T.border2,maxHeight:240,overflowY:"auto"}}>
         {fi.length===0?<div style={{padding:16,textAlign:"center",color:"#64748b",fontSize:12}}>Sin resultados</div>
-        :fi.slice(0,6).map(function(c){var s=ST[c.status]||ST.activo;return<div key={c.id} onClick={function(){setSel(c);setSr("");setTab("perfil");}} style={{padding:"10px 14px",borderBottom:"1px solid #2d3660",display:"flex",alignItems:"center",gap:9,cursor:"pointer"}}><div style={{width:30,height:30,borderRadius:8,background:s.c+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:s.c}}>{ini(c)}</div><div style={{flex:1,fontSize:12,fontWeight:600}}>{c.name}</div></div>;})}
+        :fi.slice(0,6).map(function(c){var s=ST[c.status]||ST.activo;return<div key={c.id} onClick={function(){openClient(c);setSr("");setTab("perfil");}} style={{padding:"10px 14px",borderBottom:"1px solid #2d3660",display:"flex",alignItems:"center",gap:9,cursor:"pointer"}}><div style={{width:30,height:30,borderRadius:8,background:s.c+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:s.c}}>{ini(c)}</div><div style={{flex:1,fontSize:12,fontWeight:600}}>{c.name}</div></div>;})}
       </div>}
     </div>
     {sel?<div style={B}>
@@ -1494,7 +1519,7 @@ export default function App(){
   <Suspense fallback={null}>
   <AIAssistant theme={T} dk={dk} clients={cl} followups={fu} leads={le} fisio={fis} bonos={bonos} timpData={timpData} renData={renData} actions={{
     navigate:function(section,subview){setSec(section);if(subview)setMv(subview);},
-    selectClient:function(c){setSel(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
+    selectClient:function(c){openClient(c);setTab("perfil");setSec("entrenamiento");setMv("clientes");},
     createFollowup:function(data){var nf={id:gid(),clientName:data.client,reason:data.reason,date:data.date,message:data.message,done:false};setFu(function(p){return p.concat([nf]);});saveFu(nf);},
     createLead:function(data){var nl={id:gid(),name:data.name,phone:data.phone,source:data.source,interest:"",status:data.status,month:data.month,year:data.year};setLe(function(p){return p.concat([nl]);});saveLead(nl);},
     changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});},
