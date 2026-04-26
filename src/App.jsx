@@ -134,6 +134,46 @@ export default function App(){
     return function(){clearInterval(interval);};
   },[ld,cl.length,syncInProgress]);
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  BACKUP MANUAL — descarga JSON con todo Supabase
+  //  Útil para tener una copia de seguridad puntual antes de cambios
+  //  importantes, o para auditoría. Se guarda con la fecha en el nombre.
+  // ══════════════════════════════════════════════════════════════════════
+  function downloadBackup(){
+    var tablas=["clients","leads","followups","fisio_reports","bonos_timp"];
+    var msg="Descargando backup de "+tablas.length+" tablas... Espera unos segundos.";
+    console.log("[backup] "+msg);
+    Promise.all(tablas.map(function(t){return dbGet(t).then(function(rows){return {tabla:t,rows:rows||[]};});})).then(function(results){
+      var bk={
+        timestamp:new Date().toISOString(),
+        date:new Date().toLocaleString("es-ES"),
+        version:"1.0",
+        tables:{}
+      };
+      var totalRows=0;
+      results.forEach(function(r){
+        bk.tables[r.tabla]=r.rows;
+        totalRows+=r.rows.length;
+      });
+      // Crear archivo descargable
+      var blob=new Blob([JSON.stringify(bk,null,2)],{type:"application/json"});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement("a");
+      a.href=url;
+      var d=new Date();
+      var fname="t2tcrm_backup_"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+"_"+String(d.getHours()).padStart(2,"0")+String(d.getMinutes()).padStart(2,"0")+".json";
+      a.download=fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert("✅ Backup descargado: "+fname+"\n\n"+totalRows+" registros guardados\n\nGuárdalo en sitio seguro (Drive, Dropbox, USB).");
+    }).catch(function(err){
+      console.error("[backup] Error:",err);
+      alert("❌ Error al hacer backup: "+err.message);
+    });
+  }
+
   // Wrapper seguro de syncTimp con bandera anti-duplicados
   function syncTimpSafe(){
     if(syncInProgress){console.log("[sync] Ya hay un sync en curso, ignoro");return;}
@@ -1170,6 +1210,11 @@ export default function App(){
           {timpData&&!timpSyncing&&<div style={{fontSize:9,color:"#22c55e"}}>✓ TIMP sync — {timpData.filter(function(s){return s.active_membership;}).length} activos {timpLast?" · "+timpLast:""}</div>}
           {timpData&&!timpSyncing&&<button onClick={refreshAll} title="Refrescar ahora" style={{marginTop:4,padding:"4px 10px",background:"transparent",border:"1px solid "+T.border2,borderRadius:6,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>🔄 Refrescar</button>}
           {!timpData&&!timpSyncing&&<button onClick={syncTimpSafe} style={{padding:"6px 16px",background:"#394265",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>🔗 Sincronizar TIMP</button>}
+        </div>
+
+        {/* Backup manual */}
+        <div style={{textAlign:"center",marginTop:6,paddingTop:8,borderTop:"1px solid "+T.border}}>
+          <button onClick={downloadBackup} title="Descargar backup completo de todos los datos del CRM" style={{padding:"4px 10px",background:"transparent",border:"1px solid "+T.border2,borderRadius:6,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer"}}>💾 Backup</button>
         </div>
       </div>
     </div>
