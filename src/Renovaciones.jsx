@@ -440,6 +440,9 @@ export default function Renovaciones(props) {
   Object.keys(renData).forEach(function (k) {
     var d = renData[k];
     if (!d || !d.segundoPago || !d.clientName) return;
+    // Compatibilidad retroactiva: antes los movidos manualmente se guardaban como segundoPago.
+    // Si las notas contienen "Movido desde", lo tratamos como movido (precio completo) en otro bloque.
+    if (d.notas && d.notas.indexOf("Movido desde") >= 0) return;
     var weekKey = k.split("__")[1];
     if (!weekKey) return;
     if (weekMap[weekKey]) {
@@ -456,6 +459,39 @@ export default function Renovaciones(props) {
       pagado: false, fechaPago: "",
       renewMonday: mon, fechaValor: mon, fechaFin: null,
       source: "segundo_pago", nextBooking: origClient ? origClient.nextBooking : null,
+      clientId: origClient ? origClient.clientId : null,
+      clientStatus: origClient ? origClient.clientStatus : null
+    });
+  });
+
+  // ══ Procesar entries movidos manualmente (renData con flag "movido") ══
+  // Diferencia clave con segundoPago: el precio es el COMPLETO del bono,
+  // no la mitad. Es una renovación aplazada, no un 2º pago de fraccionado.
+  // También captura entries antiguos que tenían segundoPago:true por error
+  // pero cuyas notas dicen "Movido desde" (compatibilidad retroactiva).
+  Object.keys(renData).forEach(function (k) {
+    var d = renData[k];
+    if (!d || !d.clientName) return;
+    var esMovido = d.movido || (d.segundoPago && d.notas && d.notas.indexOf("Movido desde") >= 0);
+    if (!esMovido) return;
+    var weekKey = k.split("__")[1];
+    if (!weekKey) return;
+    if (weekMap[weekKey]) {
+      var already = weekMap[weekKey].clients.some(function (c) { return c.nombre.toLowerCase().trim() === d.clientName.toLowerCase().trim(); });
+      if (already) return;
+    }
+    var origClient = entries.find(function (e) { return e.nombre.toLowerCase().trim() === d.clientName.toLowerCase().trim(); });
+    var mon = new Date(weekKey + "T00:00:00");
+    if (isNaN(mon)) return;
+    if (!weekMap[weekKey]) weekMap[weekKey] = { monday: mon, key: weekKey, clients: [] };
+    weekMap[weekKey].clients.push({
+      nombre: d.clientName,
+      tipo: origClient ? origClient.tipo : "",
+      precio: origClient ? origClient.precio : 0,
+      pagado: false, fechaPago: "",
+      renewMonday: mon, fechaValor: mon, fechaFin: null,
+      source: "movido", // distinto de segundo_pago para mantener precio completo
+      nextBooking: origClient ? origClient.nextBooking : null,
       clientId: origClient ? origClient.clientId : null,
       clientStatus: origClient ? origClient.clientStatus : null
     });
@@ -1015,7 +1051,9 @@ export default function Renovaciones(props) {
             var fk = moveClient.nombre.toLowerCase().trim() + "__" + fromKey;
             var tk = moveClient.nombre.toLowerCase().trim() + "__" + moveTarget;
             n[fk] = Object.assign({}, n[fk] || {}, { renovacion: "renovado", notas: (n[fk] && n[fk].notas ? n[fk].notas + " | " : "") + "→ Movido a " + moveTarget });
-            n[tk] = Object.assign({}, n[tk] || {}, { notas: "Movido desde " + fromKey, segundoPago: true, clientName: moveClient.nombre });
+            // Mover NO es un segundoPago: es una renovación aplazada manualmente.
+            // Usamos "movido: true" para diferenciarlo y que mantenga el precio completo.
+            n[tk] = Object.assign({}, n[tk] || {}, { notas: "Movido desde " + fromKey, movido: true, clientName: moveClient.nombre });
             if (setRenData) setRenData(n);
             if (onSaveRenData) onSaveRenData(n);
             setMoveClient(null);
