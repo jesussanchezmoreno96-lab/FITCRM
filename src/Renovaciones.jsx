@@ -604,7 +604,9 @@ export default function Renovaciones(props) {
 
   var selCounts = selWeek ? wc(selWeek) : { renovados: 0, pendientes: 0, bajas: 0, total: 0 };
 
-  // Calcular nº de retrasos (bonos sin pagar de hace 7-30 días) para el badge
+  // Calcular nº de retrasos (bonos sin pagar) para el badge.
+  // No fraccionados: 7-60 días sin pagar.
+  // Fraccionados: solo a partir del día 49 (7 semanas) sin liquidar 2º pago.
   function countRetrasos(){
     var count = 0;
     var seen = {};
@@ -626,7 +628,10 @@ export default function Renovaciones(props) {
       if(isNaN(f.getTime())) return;
       var hoy = new Date(); hoy.setHours(0,0,0,0); f.setHours(0,0,0,0);
       var dias = Math.floor((hoy - f) / (1000*60*60*24));
-      if(dias < 7 || dias > 30) return;
+      if(dias > 60) return;
+      // Umbral según tipo: fraccionado 49d (semana 7), pago único 7d
+      var umbral = fraccionado ? 49 : 7;
+      if(dias < umbral) return;
       count++;
     });
     return count;
