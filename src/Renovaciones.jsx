@@ -1,4 +1,5 @@
 import { useState } from "react";
+import RetrasosPago from "./RetrasosPago.jsx";
 
 var DAYS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
 var MONTHS_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -19,6 +20,18 @@ function matchesName(a,b){
   var wa=na.split(" "),wb=nb.split(" ");
   if(wa.length<2||wb.length<2)return false;
   return wa[0]===wb[0]&&wa[1]===wb[1];
+}
+
+// Match preferente por UUID con fallback a nombre.
+// crmCl: cliente del CRM (con .name y .timpUuid)
+// other: objeto con .uuid/.timpUuid/.suscriptionUuid o .nombre/.full_name/.name
+function matchesClient(crmCl, other){
+  if(!crmCl||!other)return false;
+  var uuidA=crmCl.timpUuid;
+  var uuidB=other.uuid||other.timpUuid||other.suscriptionUuid;
+  if(uuidA&&uuidB)return uuidA===uuidB;
+  var nameB=other.name||other.full_name||other.nombre;
+  return matchesName(crmCl.name,nameB);
 }
 
 function getMonday(d) {
@@ -80,6 +93,9 @@ export default function Renovaciones(props) {
   var onSaveRenData = props.onSaveRenData;
   var onChangeStatus = props.onChangeStatus;
   var importCuotas = props.importCuotas;
+
+  // Tab activo: "renovaciones" o "retrasos"
+  var tab_ = useState("renovaciones"), tab = tab_[0], setTab = tab_[1];
 
   // Helper: normalizar nombre para comparación
   function normN(s){return (s||"").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
@@ -158,7 +174,11 @@ export default function Renovaciones(props) {
     if (inBlacklist(client.nombre)) return;
 
     var sorted = client.bonos.slice().sort(function (a, b) { return a.fechaValor - b.fechaValor; });
-    var crmClient = clients.find(function (cl) { return matchesName(cl.name, client.nombre); });
+    // Match por UUID si lo tenemos en cliente CRM y bono (más fiable). Fallback a nombre.
+    var crmClient = clients.find(function (cl) {
+      if (cl.timpUuid && client.uuid) return cl.timpUuid === client.uuid;
+      return matchesName(cl.name, client.nombre);
+    });
     var nextBooking = crmClient && crmClient.timpNextBooking ? crmClient.timpNextBooking : null;
     var addedWeeks = {};
 
@@ -584,10 +604,39 @@ export default function Renovaciones(props) {
 
   var selCounts = selWeek ? wc(selWeek) : { renovados: 0, pendientes: 0, bajas: 0, total: 0 };
 
+  // Calcular nº de retrasos (bonos sin pagar de hace 7-30 días) para el badge
+  function countRetrasos(){
+    var count = 0;
+    var seen = {};
+    bonos.forEach(function(b){
+      var caption = (b.tipoBono || b.concepto || "").toLowerCase();
+      var isEntrenamiento = caption.indexOf("time") >= 0 || caption.indexOf("partner") >= 0 || caption.indexOf("pro") >= 0 || caption.indexOf("bono") >= 0 || caption.indexOf("sesion") >= 0 || caption.indexOf("dual") >= 0;
+      if(!isEntrenamiento) return;
+      var key = b.nombre + "__" + (b.fechaValor || "");
+      if(seen[key]) return;
+      seen[key] = true;
+      var precio = +b.precio || +b.total || 0;
+      var pagado = !!b.pagado;
+      var importePagado = +b.importePagado || 0;
+      var fraccionado = !!b.fraccionado;
+      var pendiente = pagado ? 0 : (fraccionado ? precio - importePagado : precio);
+      if(pendiente <= 0) return;
+      if(!b.fechaValor) return;
+      var f = new Date(b.fechaValor);
+      if(isNaN(f.getTime())) return;
+      var hoy = new Date(); hoy.setHours(0,0,0,0); f.setHours(0,0,0,0);
+      var dias = Math.floor((hoy - f) / (1000*60*60*24));
+      if(dias < 7 || dias > 30) return;
+      count++;
+    });
+    return count;
+  }
+  var nRetrasos = countRetrasos();
+
   // ══ RENDER ══
   return (<div>
     {/* Header */}
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
       <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>🔄 Renovaciones</h2>
       <div style={{ display: "flex", gap: 8, flexWrap:"wrap" }}>
         <button onClick={function(){setShowBl(true);}} style={{ padding: "8px 12px", background: "transparent", border: "1px solid " + T.border, borderRadius: 9, color: T.text2, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
@@ -601,6 +650,36 @@ export default function Renovaciones(props) {
         </label>
       </div>
     </div>
+
+    {/* Tabs Renovaciones / Retrasos */}
+    <div style={{ display: "flex", gap: 6, marginBottom: 20, borderBottom: "1.5px solid " + T.border }}>
+      <button onClick={function(){setTab("renovaciones");}} style={{
+        padding: "10px 16px",
+        border: "none",
+        borderBottom: tab === "renovaciones" ? "3px solid #394265" : "3px solid transparent",
+        background: "transparent",
+        color: tab === "renovaciones" ? T.text : T.text3,
+        fontSize: 13, fontWeight: 700, cursor: "pointer",
+        marginBottom: -1.5
+      }}>📅 Esta semana</button>
+      <button onClick={function(){setTab("retrasos");}} style={{
+        padding: "10px 16px",
+        border: "none",
+        borderBottom: tab === "retrasos" ? "3px solid #dc2626" : "3px solid transparent",
+        background: "transparent",
+        color: tab === "retrasos" ? T.text : T.text3,
+        fontSize: 13, fontWeight: 700, cursor: "pointer",
+        marginBottom: -1.5,
+        display: "flex", alignItems: "center", gap: 6
+      }}>🚨 Retrasos {nRetrasos > 0 && <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 9, background: "#dc2626", color: "#fff", fontWeight: 800 }}>{nRetrasos}</span>}</button>
+    </div>
+
+    {/* Si tab=retrasos: render directo del componente RetrasosPago */}
+    {tab === "retrasos" && <RetrasosPago theme={T} dk={dk} bonos={bonos} clients={clients} />}
+
+    {/* Si tab=renovaciones: continúa con la vista normal */}
+    {tab === "renovaciones" && <div>
+
 
     {/* Modal Lista Negra */}
     {showBl && <div onClick={function(){setShowBl(false);}} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
@@ -743,22 +822,23 @@ export default function Renovaciones(props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
             {/* Name + price */}
-            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{
                 fontSize: 12, fontWeight: 700, color: T.text,
-                textDecoration: isBaja ? "line-through" : "none"
+                textDecoration: isBaja ? "line-through" : "none",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 12, fontWeight: 900, color: stColor }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
-              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 {Math.round(r.importePagado)}€/{r.precio}€</span>}
-              {r.source === "calculado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>sin bono nuevo</span>}
-              {isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>2º pago</span>}
-              {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700 }}>💰 Fraccionado</span>}
-              {isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>🔒 Reserva</span>}
-              {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700 }}>💰 Pago restante</span>}
-              {r.source === "agotado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ {r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total}</span>}
-              {r.source === "agotado_excel" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚡ Agotado</span>}
-              {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700 }}>⚠️ {r.sesiones.restantes}/{r.sesiones.total}</span>}
-              {r.source === "arrastre_impago" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700 }}>⚠️ Impago {r.originalWeek}</span>}
+              <span style={{ fontSize: 12, fontWeight: 900, color: stColor, whiteSpace: "nowrap", flexShrink: 0 }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
+              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 {Math.round(r.importePagado)}€/{r.precio}€</span>}
+              {r.source === "calculado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>sin bono nuevo</span>}
+              {isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>2º pago</span>}
+              {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 Fraccionado</span>}
+              {isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>🔒 Reserva</span>}
+              {r.source === "pago_restante" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#06b6d415", color: "#06b6d4", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 Pago restante</span>}
+              {r.source === "agotado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>⚡ {r.sesiones.usadas + r.sesiones.caducadas}/{r.sesiones.total}</span>}
+              {r.source === "agotado_excel" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>⚡ Agotado</span>}
+              {r.source === "ultima_sesion" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>⚠️ {r.sesiones.restantes}/{r.sesiones.total}</span>}
+              {r.source === "arrastre_impago" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#ef444415", color: "#ef4444", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>⚠️ Impago {r.originalWeek}</span>}
             </div>
 
             {/* STATUS — big select */}
@@ -807,11 +887,11 @@ export default function Renovaciones(props) {
               }}
               disabled={r.pagado}
               style={{
-                padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 800,
+                padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 800,
                 outline: "none", cursor: r.pagado ? "default" : "pointer",
-                border: "1px solid " + stBorder,
+                border: "1.5px solid " + stBorder,
                 background: stBg, color: stColor,
-                minWidth: 110, flexShrink: 0
+                minWidth: 130, flexShrink: 0
               }}
             >
               <option value="pendiente">⏳ Pendiente</option>
@@ -950,5 +1030,7 @@ export default function Renovaciones(props) {
           style={{ width: "100%", padding: 10, background: "#ef444410", border: "1px solid #ef444430", borderRadius: 9, color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer", marginTop: 10 }}>🗑️ Eliminar de esta semana</button>
       </div>
     </div>}
+
+    </div>}{/* /tab renovaciones */}
   </div>);
 }
