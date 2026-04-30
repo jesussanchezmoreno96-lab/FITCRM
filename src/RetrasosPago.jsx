@@ -15,7 +15,7 @@ export default function RetrasosPago(props) {
 
   var _ = useState;
   var buscar_ = _(""), buscar = buscar_[0], setBuscar = buscar_[1];
-  var rangoDias_ = _(30), rangoDias = rangoDias_[0], setRangoDias = rangoDias_[1];
+  var rangoDias_ = _(60), rangoDias = rangoDias_[0], setRangoDias = rangoDias_[1];
 
   // Helper: días desde una fecha hasta hoy
   function diasDesde(fechaStr) {
@@ -66,8 +66,17 @@ export default function RetrasosPago(props) {
 
     // Calcular antigüedad
     var dias = diasDesde(b.fechaValor);
-    if (dias < 7) return;          // muy reciente, no es retraso aún
     if (dias > rangoDias) return;  // fuera del rango (default 30 días)
+
+    // Umbral según tipo de bono:
+    //   - Fraccionado: a partir del día 49 (= 7 semanas, después de que tocara el 2º pago)
+    //   - Pago único: a partir del día 7
+    var umbralDias = fraccionado ? 49 : 7;
+    if (dias < umbralDias) return;
+
+    // Para FRACCIONADOS: el segundo pago se hace a las 6 semanas (~42 días).
+    // Antes de la semana 6 NO es retraso, está dentro del plazo del fraccionado.
+    if (fraccionado && dias < 42) return;
 
     // Match cliente CRM para teléfono/email
     var crmClient = clients.find(function (cl) {
@@ -105,7 +114,7 @@ export default function RetrasosPago(props) {
     {/* Header */}
     <div style={{ marginBottom: 24 }}>
       <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: T.text }}>🚨 Retrasos de pago</h1>
-      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.text3 }}>Bonos comprados hace 7 a {rangoDias} días sin pagar todavía</p>
+      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.text3 }}>Bonos sin pagar fuera de plazo (fraccionados a partir de la semana 6)</p>
     </div>
 
     {/* Tarjetas resumen */}
@@ -139,9 +148,9 @@ export default function RetrasosPago(props) {
         style={{ padding: "10px 14px", borderRadius: 9, border: "1px solid " + T.border, background: T.bg, color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
       >
         <option value={14}>Últimos 14 días</option>
-        <option value={21}>Últimos 21 días</option>
         <option value={30}>Últimos 30 días</option>
         <option value={60}>Últimos 60 días</option>
+        <option value={90}>Últimos 90 días</option>
       </select>
     </div>
 
@@ -189,7 +198,7 @@ export default function RetrasosPago(props) {
 
     {/* Nota explicativa */}
     <div style={{ marginTop: 16, padding: 12, background: dk ? "rgba(59,130,246,.06)" : "#eff6ff", border: "1px solid " + (dk ? "rgba(59,130,246,.2)" : "#bfdbfe"), borderRadius: 8, fontSize: 11, color: T.text3, lineHeight: 1.5 }}>
-      💡 <b>Cómo funciona</b>: este informe detecta bonos del Excel de Cuotas con fecha valor de hace 7 a {rangoDias} días sin pagar. Para que un retraso desaparezca, márcalo como pagado en TIMP y refresca el CRM.
+      💡 <b>Cómo funciona</b>: detecta bonos sin pagar. Los <b>de pago único</b> aparecen como retraso desde el día 7. Los <b>fraccionados</b> solo aparecen si pasa la <b>semana 7 (día 49)</b> sin haberse cobrado el 2º pago — antes están dentro de su periodo válido. Para que un retraso desaparezca, márcalo como pagado en TIMP y refresca el CRM.
     </div>
 
   </div>);
