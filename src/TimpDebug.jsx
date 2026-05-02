@@ -45,8 +45,13 @@ export default function TimpDebug(props) {
   var error_ = _(null), error = error_[0], setError = error_[1];
   var data_ = _(null), data = data_[0], setData = data_[1];
   var url_ = _(""), lastUrl = url_[0], setLastUrl = url_[1];
+  var custom_ = _("branch_buildings/" + TIMP_CENTER + "/accounting?date=2026-04-15"), customPath = custom_[0], setCustomPath = custom_[1];
 
   function buildPath() {
+    if (endpoint === "__custom__") {
+      var encoded = customPath.replace(/\?/g, "%3F").replace(/&/g, "%26");
+      return encoded;
+    }
     var query = "%3Fdate_from=" + encodeURIComponent(dateFrom) +
                 "%26date_to=" + encodeURIComponent(dateTo) +
                 "%26page=" + page;
@@ -95,7 +100,7 @@ export default function TimpDebug(props) {
       <h2 style={{ margin: "0 0 16px", fontSize: 22, fontWeight: 800, color: T.text }}>🔧 TIMP Debug</h2>
 
       <div style={card}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 0.5fr auto", gap: 12, alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: endpoint === "__custom__" ? "1.2fr 3fr auto" : "1.2fr 1fr 1fr 0.5fr auto", gap: 12, alignItems: "end" }}>
           <div>
             <span style={label}>Endpoint</span>
             <select value={endpoint} onChange={function (e) { setEndpoint(e.target.value); }} style={Object.assign({}, input, { width: "100%" })}>
@@ -106,20 +111,30 @@ export default function TimpDebug(props) {
               <option value="cash_movements">cash_movements</option>
               <option value="cash_box">cash_box</option>
               <option value="daily_cash">daily_cash</option>
+              <option value="__custom__">[URL custom]</option>
             </select>
           </div>
-          <div>
-            <span style={label}>date_from</span>
-            <input type="date" value={dateFrom} onChange={function (e) { setDateFrom(e.target.value); }} style={Object.assign({}, input, { width: "100%" })} />
-          </div>
-          <div>
-            <span style={label}>date_to</span>
-            <input type="date" value={dateTo} onChange={function (e) { setDateTo(e.target.value); }} style={Object.assign({}, input, { width: "100%" })} />
-          </div>
-          <div>
-            <span style={label}>page</span>
-            <input type="number" min="1" value={page} onChange={function (e) { setPage(Math.max(1, parseInt(e.target.value, 10) || 1)); }} style={Object.assign({}, input, { width: "100%" })} />
-          </div>
+          {endpoint === "__custom__" ? (
+            <div>
+              <span style={label}>Path completo (sin /api/timp?path=)</span>
+              <input type="text" value={customPath} onChange={function (e) { setCustomPath(e.target.value); }} style={Object.assign({}, input, { width: "100%" })} />
+            </div>
+          ) : (
+            <>
+              <div>
+                <span style={label}>date_from</span>
+                <input type="date" value={dateFrom} onChange={function (e) { setDateFrom(e.target.value); }} style={Object.assign({}, input, { width: "100%" })} />
+              </div>
+              <div>
+                <span style={label}>date_to</span>
+                <input type="date" value={dateTo} onChange={function (e) { setDateTo(e.target.value); }} style={Object.assign({}, input, { width: "100%" })} />
+              </div>
+              <div>
+                <span style={label}>page</span>
+                <input type="number" min="1" value={page} onChange={function (e) { setPage(Math.max(1, parseInt(e.target.value, 10) || 1)); }} style={Object.assign({}, input, { width: "100%" })} />
+              </div>
+            </>
+          )}
           <button onClick={consultar} disabled={loading} style={Object.assign({}, btn, { opacity: loading ? 0.6 : 1, cursor: loading ? "wait" : "pointer" })}>
             {loading ? "⏳ Consultando..." : "Consultar"}
           </button>
