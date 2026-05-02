@@ -9,7 +9,6 @@ const Dashboard = lazy(() => import("./Dashboard.jsx"));
 const Renovaciones = lazy(() => import("./Renovaciones.jsx"));
 const Pagos = lazy(() => import("./Pagos.jsx"));
 const Cancelaciones = lazy(() => import("./Cancelaciones.jsx"));
-const TimpDebug = lazy(() => import("./TimpDebug.jsx"));
 
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -1206,19 +1205,6 @@ export default function App(){
           <span style={{fontSize:14,color:T.text3}}>→</span>
         </button>
 
-        {/* ═══ TIMP DEBUG BUTTON ═══ */}
-        <button onClick={function(){setSec("timpdebug");}} style={{
-          width:"100%",padding:"12px 22px",background:T.bg2,border:"1px solid "+T.border,borderRadius:14,
-          cursor:"pointer",display:"flex",alignItems:"center",gap:12,color:T.text,textAlign:"left",marginBottom:16
-        }}>
-          <span style={{fontSize:20}}>🔧</span>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:800}}>TIMP Debug</div>
-            <div style={{fontSize:10,color:T.text3}}>Inspección cruda de endpoints TIMP (sólo lectura)</div>
-          </div>
-          <span style={{fontSize:14,color:T.text3}}>→</span>
-        </button>
-
         {/* TIMP Sync status */}
         <div style={{textAlign:"center",marginTop:8}}>
           {timpSyncing&&<div style={{fontSize:10,color:T.text3}}>🔄 Sincronizando...</div>}
@@ -1261,26 +1247,6 @@ export default function App(){
         changeStatus:function(name,status){sv(function(p){return p.map(function(c){return c.name.toLowerCase().indexOf(name.toLowerCase())>=0?Object.assign({},c,{status:status}):c;});});}
       }}/>
       </Suspense>
-    </div>
-  );
-
-  /* ═══ TIMP DEBUG ═══ */
-  if(sec==="timpdebug") return(
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Sans',sans-serif"}}>
-      <div style={{background:dk?"linear-gradient(135deg,#1a1a10,#1a2140)":"#394265",borderBottom:"1px solid "+T.border,padding:"16px 20px"}}>
-        <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <button onClick={function(){setSec("home");}} style={{padding:"6px 14px",background:dk?"#2d3660":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),borderRadius:8,color:dk?"#94a3b8":"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>← Inicio</button>
-            <span style={{fontSize:20}}>🔧</span><h1 style={{margin:0,fontSize:20,fontWeight:800,color:dk?T.text:"#fff"}}>TIMP Debug</h1>
-          </div>
-          <button onClick={function(){setTheme(dk?"light":"dark");}} style={{width:36,height:36,borderRadius:9,background:dk?"#2d3660":"rgba(255,255,255,.15)",border:"1px solid "+(dk?"#3a4570":"rgba(255,255,255,.2)"),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:16}}>{dk?"☀️":"🌙"}</button>
-        </div>
-      </div>
-      <div style={{maxWidth:1100,margin:"0 auto",padding:20}}>
-        <Suspense fallback={<div style={{padding:40,textAlign:"center",color:T.text3,fontSize:13}}>⏳ Cargando TIMP Debug...</div>}>
-          <TimpDebug theme={T} dk={dk}/>
-        </Suspense>
-      </div>
     </div>
   );
 
