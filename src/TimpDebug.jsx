@@ -178,11 +178,11 @@ export default function TimpDebug(props) {
 
           <div>
             <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: 8 }}>
-              Primeros {collection ? Math.min(3, collection.length) : 0} registros
+              Primeros {collection ? Math.min(50, collection.length) : 0} registros
             </div>
             <pre style={pre}>
               {collection
-                ? JSON.stringify(collection.slice(0, 3), null, 2)
+                ? JSON.stringify(collection.slice(0, 50), null, 2)
                 : JSON.stringify(data, null, 2).slice(0, 4000)}
             </pre>
           </div>
