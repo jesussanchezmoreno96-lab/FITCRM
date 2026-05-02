@@ -1549,7 +1549,7 @@ export default function App(){
     <Horarios theme={T} dk={dk}/>
   </div>}
 {mv==="bonus"&&<Suspense fallback={<div/>}><Bonus theme={T} dk={dk} bonos={bonos} clients={cl}/></Suspense>}
-
+</Suspense>
   </div>
 
   {/* MODALS */}
