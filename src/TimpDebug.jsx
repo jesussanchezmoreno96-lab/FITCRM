@@ -101,6 +101,11 @@ export default function TimpDebug(props) {
             <select value={endpoint} onChange={function (e) { setEndpoint(e.target.value); }} style={Object.assign({}, input, { width: "100%" })}>
               <option value="suscription_invoices">suscription_invoices</option>
               <option value="purchases">purchases</option>
+              <option value="accounting">accounting</option>
+              <option value="payments">payments</option>
+              <option value="cash_movements">cash_movements</option>
+              <option value="cash_box">cash_box</option>
+              <option value="daily_cash">daily_cash</option>
             </select>
           </div>
           <div>
