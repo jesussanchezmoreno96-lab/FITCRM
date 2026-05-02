@@ -829,15 +829,20 @@ export default function Renovaciones(props) {
         var bMitad = db.renovacion === "mitad" || (b.mitadPagada && !b.pagado && db.renovacion !== "baja");
         var aReserva = da.renovacion === "reserva" || (a.esReserva && !a.pagado && da.renovacion !== "baja");
         var bReserva = db.renovacion === "reserva" || (b.esReserva && !b.pagado && db.renovacion !== "baja");
-        var sa = (da.renovacion === "renovado" || a.pagado) ? 0 : aReserva ? 0.5 : aMitad ? 1 : da.renovacion === "baja" ? 3 : 2;
-        var sb = (db.renovacion === "renovado" || b.pagado) ? 0 : bReserva ? 0.5 : bMitad ? 1 : db.renovacion === "baja" ? 3 : 2;
+        var aEsEf = (a.precio === 0) && a.source !== "segundo_pago" && a.source !== "movido" && a.source !== "pago_restante" && a.source !== "calculado";
+        var bEsEf = (b.precio === 0) && b.source !== "segundo_pago" && b.source !== "movido" && b.source !== "pago_restante" && b.source !== "calculado";
+        var aRenov = da.renovacion === "renovado" || (a.pagado && !aEsEf);
+        var bRenov = db.renovacion === "renovado" || (b.pagado && !bEsEf);
+        var sa = aRenov ? 0 : aReserva ? 0.5 : aMitad ? 1 : da.renovacion === "baja" ? 3 : 2;
+        var sb = bRenov ? 0 : bReserva ? 0.5 : bMitad ? 1 : db.renovacion === "baja" ? 3 : 2;
         return sa - sb;
       }).map(function (r, i) {
         var data = rd(r.nombre, selWeek.key);
         // Auto-detect mitad pagada or reserva from TIMP API
         var autoMitad = r.mitadPagada && !r.pagado;
         var autoReserva = r.esReserva && !r.pagado;
-        var isRenovado = data.renovacion === "renovado" || r.pagado;
+        var esEfectivoPendienteR = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
+        var isRenovado = data.renovacion === "renovado" || (r.pagado && !esEfectivoPendienteR);
         var isReserva = data.renovacion === "reserva" || (autoReserva && !isRenovado && data.renovacion !== "baja");
         var isMitad = data.renovacion === "mitad" || (autoMitad && !isRenovado && !isReserva && data.renovacion !== "baja");
         var isBaja = data.renovacion === "baja";
@@ -889,7 +894,7 @@ export default function Renovaciones(props) {
 
             {/* STATUS — big select */}
             <select
-              value={r.pagado ? "renovado" : isReserva ? "reserva" : isMitad ? "mitad" : (data.renovacion || "pendiente")}
+              value={(r.pagado && !esEfectivoPendienteR) ? "renovado" : isReserva ? "reserva" : isMitad ? "mitad" : (data.renovacion || "pendiente")}
               onChange={function (e) {
                 var val = e.target.value;
                 upd(r.nombre, selWeek.key, "renovacion", val);
