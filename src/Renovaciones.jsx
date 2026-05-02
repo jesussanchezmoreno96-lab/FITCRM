@@ -997,8 +997,9 @@ export default function Renovaciones(props) {
             if (isSegundoPago || r.source === "movido") return null;
             var hoy = new Date(); hoy.setHours(0,0,0,0);
             var ff = r.fechaFin ? new Date(r.fechaFin) : null;
-            var sinBono = (ff && ff < hoy) || r.source === "calculado";
-            if (!sinBono) return null;
+            if (!ff) return null;
+            ff.setHours(0,0,0,0);
+            if (ff >= hoy) return null;
             return <div style={{
               fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
               background: dk ? "rgba(245,158,11,0.12)" : "#fef3c7",
