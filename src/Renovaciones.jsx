@@ -632,11 +632,19 @@ export default function Renovaciones(props) {
       var d = rd(c.nombre, w.key);
       var esEfectivoPendiente = (c.precio === 0) && c.source !== "segundo_pago" && c.source !== "movido" && c.source !== "pago_restante" && c.source !== "calculado";
       var marcadoRenovadoManual = (d.renovacion === "renovado");
+      // Estados gestionados que NO son pago pendiente:
+      var esMitad = d.renovacion === "mitad" || (c.mitadPagada && !c.pagado && d.renovacion !== "baja");
+      var esReserva = d.renovacion === "reserva" || (c.esReserva && !c.pagado && d.renovacion !== "baja");
+
       if (marcadoRenovadoManual || (c.pagado && !esEfectivoPendiente)) r++;
       else if (d.renovacion === "baja") b++;
+      else if (esMitad || esReserva) {
+        // Pagos fraccionados o reservas: gestionados, NO son pendientes
+        // No incrementan p ni pendientesPago — están en otra semana
+      }
       else {
         p++;
-        // Si la semana ya pasó y no está renovado ni en baja → pago pendiente
+        // Si la semana ya pasó y no está renovado, baja, mitad ni reserva → pago pendiente real
         if (isPastWeek) pendientesPago++;
       }
     });
