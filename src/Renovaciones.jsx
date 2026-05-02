@@ -967,6 +967,23 @@ export default function Renovaciones(props) {
               }}>📅</button>
           </div>
 
+          {/* SIN BONO ACTIVO — solo si el último bono ya caducó (caso B) */}
+          {(() => {
+            if (isSegundoPago || r.source === "movido") return null;
+            var hoy = new Date(); hoy.setHours(0,0,0,0);
+            var ff = r.fechaFin ? new Date(r.fechaFin) : null;
+            var sinBono = (ff && ff < hoy) || r.source === "calculado";
+            if (!sinBono) return null;
+            return <div style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+              background: dk ? "rgba(245,158,11,0.12)" : "#fef3c7",
+              color: "#d97706",
+              border: "1px solid " + (dk ? "rgba(245,158,11,0.25)" : "#fde68a"),
+              padding: "2px 8px", borderRadius: 6,
+              display: "inline-block", marginTop: 4
+            }}>⚠️ SIN BONO ACTIVO</div>;
+          })()}
+
           {/* Notes — compact, click to edit */}
           {(isEditingNote || data.notas) && <div style={{ marginTop: 4 }}>
             {isEditingNote ? (
