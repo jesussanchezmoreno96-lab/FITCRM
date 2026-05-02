@@ -561,7 +561,8 @@ export default function Renovaciones(props) {
       var wData = weekMap[wk];
       if (!wData || !wData.clients) return;
       wData.clients.forEach(function (c) {
-        if (c.pagado) return;
+        var esEfPend = (c.precio === 0) && c.source !== "segundo_pago" && c.source !== "movido" && c.source !== "pago_restante" && c.source !== "calculado";
+        if (c.pagado && !esEfPend) return;
         // Check renData for THIS specific entry's week
         var d = rd(c.nombre, wk);
         if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva") return;
@@ -609,7 +610,9 @@ export default function Renovaciones(props) {
   if (thisWeekData) {
     thisWeekData.clients.forEach(function (r) {
       var d = rd(r.nombre, thisWeekData.key);
-      if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva" || r.pagado || r.mitadPagada || r.esReserva) return;
+      var esEfPendN = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
+      var pagadoReal = r.pagado && !esEfPendN;
+      if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva" || pagadoReal || r.mitadPagada || r.esReserva) return;
       if (r.nextBooking) {
         try {
           var bd = new Date(r.nextBooking);
@@ -627,7 +630,9 @@ export default function Renovaciones(props) {
     var isPastWeek = w.monday < thisMonday;
     w.clients.forEach(function (c) {
       var d = rd(c.nombre, w.key);
-      if (d.renovacion === "renovado" || c.pagado) r++;
+      var esEfectivoPendiente = (c.precio === 0) && c.source !== "segundo_pago" && c.source !== "movido" && c.source !== "pago_restante" && c.source !== "calculado";
+      var marcadoRenovadoManual = (d.renovacion === "renovado");
+      if (marcadoRenovadoManual || (c.pagado && !esEfectivoPendiente)) r++;
       else if (d.renovacion === "baja") b++;
       else {
         p++;
@@ -926,10 +931,10 @@ export default function Renovaciones(props) {
                   }
                 }
               }}
-              disabled={r.pagado}
+              disabled={r.pagado && !((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado")}
               style={{
                 padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 800,
-                outline: "none", cursor: r.pagado ? "default" : "pointer",
+                outline: "none", cursor: (r.pagado && !((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado")) ? "default" : "pointer",
                 border: "1.5px solid " + stBorder,
                 background: stBg, color: stColor,
                 minWidth: 130, flexShrink: 0
@@ -966,6 +971,21 @@ export default function Renovaciones(props) {
                 padding: 0, flexShrink: 0
               }}>📅</button>
           </div>
+
+          {/* EFECTIVO PENDIENTE — bono a precio 0 (TIMP marca pagado pero falta cobrar en mano) */}
+          {(() => {
+            var data2 = rd(r.nombre, selWeek.key);
+            var esEfectivoPendiente = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
+            if (!esEfectivoPendiente || data2.renovacion === "renovado") return null;
+            return <div style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
+              background: dk ? "rgba(16,185,129,0.12)" : "#d1fae5",
+              color: "#059669",
+              border: "1px solid " + (dk ? "rgba(16,185,129,0.25)" : "#a7f3d0"),
+              padding: "2px 8px", borderRadius: 6,
+              display: "inline-block", marginTop: 4, marginRight: 6
+            }}>💵 EFECTIVO</div>;
+          })()}
 
           {/* SIN BONO ACTIVO — solo si el último bono ya caducó (caso B) */}
           {(() => {
