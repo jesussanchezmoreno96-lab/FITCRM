@@ -97,17 +97,50 @@ async function timpAdmissionsForDate(host, dateStr) {
   return all;
 }
 
-function buildAttendingSet(admissions) {
-  const set = new Set();
+// Devuelve un Map nombre_normalizado → hora más temprana del día (0-23).
+// Si un cliente tiene varias clases, usa la más temprana (la de mañana
+// gana sobre la de tarde para el envío del aviso).
+function buildAttendingMap(admissions) {
+  const map = new Map();
   for (const a of admissions) {
+    // starting_at viene en UTC, formato "2026-05-04T08:00:00.000Z".
+    // Convertimos a hora Madrid mirando el offset.
+    let hour = null;
+    if (a.starting_at) {
+      try {
+        const d = new Date(a.starting_at);
+        // Usar Intl para obtener la hora en Europe/Madrid sin importar
+        // el offset del servidor (Vercel corre en UTC).
+        const fmt = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Madrid",
+          hour: "2-digit", hour12: false
+        });
+        const parts = fmt.formatToParts(d);
+        const h = parts.find(p => p.type === "hour");
+        if (h) hour = parseInt(h.value, 10);
+      } catch (e) { /* ignorar */ }
+    }
+    if (hour === null) continue;
+
     const bookings = a.bookings || [];
     for (const b of bookings) {
       if (b.status === "valid" && b.full_name) {
-        set.add(normName(b.full_name));
+        const key = normName(b.full_name);
+        const prev = map.get(key);
+        // Quedarse con la hora más temprana
+        if (prev === undefined || hour < prev) map.set(key, hour);
       }
     }
   }
-  return set;
+  return map;
+}
+
+// Helper: dada la hora de la primera clase, ¿es turno de mañana o tarde?
+// Mañana: 7:00 - 13:59 (incluye clase de 13:00 que termina a las 14:00).
+// Tarde: 14:00 - 22:00.
+function turnoDe(hora) {
+  if (hora === null || hora === undefined) return null;
+  return hora < 14 ? "mañana" : "tarde";
 }
 
 // ─── Lectura de la lista persistida ────────────────────────────────────
@@ -139,15 +172,16 @@ function buildAttendingSet(admissions) {
 // }
 
 // ─── Lógica de selección (igual que antes pero usando estado del CRM) ─
-function decideListas({ persisted, renData, attendingSet, manana, semanaActualKey, semanaSiguienteKey }) {
-  const cobrar = [];
-  const avisar = [];
+function decideListas({ persisted, renData, attendingMap, manana, semanaActualKey, semanaSiguienteKey }) {
+  const cobrarMan = [];
+  const cobrarTar = [];
+  const avisarMan = [];
+  const avisarTar = [];
 
   const weeksData = (persisted && persisted.weeks) || {};
   const semanaActual = weeksData[semanaActualKey] || [];
   const semanaSiguiente = weeksData[semanaSiguienteKey] || [];
 
-  // Helper para sacar el estado de un cliente en una semana concreta.
   function estadoEn(nombre, weekKey) {
     const k = `${nombre.toLowerCase().trim()}__${weekKey}`;
     const d = renData[k] || {};
@@ -158,30 +192,42 @@ function decideListas({ persisted, renData, attendingSet, manana, semanaActualKe
     };
   }
 
+  // Ayuda: meter el cliente en la lista correcta según su turno.
+  function pushCobrar(item, hora) {
+    const t = turnoDe(hora);
+    if (t === "mañana") cobrarMan.push(item);
+    else if (t === "tarde") cobrarTar.push(item);
+  }
+  function pushAvisar(item, hora) {
+    const t = turnoDe(hora);
+    if (t === "mañana") avisarMan.push(item);
+    else if (t === "tarde") avisarTar.push(item);
+  }
+
   const yaIncluido = new Set();
 
-  // ─── A COBRAR: clientes en la semana actual que vienen mañana ───
+  // ─── A COBRAR ───
   for (const c of semanaActual) {
     if (!c || !c.nombre) continue;
     const nn = normName(c.nombre);
     if (yaIncluido.has(nn)) continue;
-    if (!attendingSet.has(nn)) continue;
+    const hora = attendingMap.get(nn);
+    if (hora === undefined) continue; // no viene mañana
 
     const st = estadoEn(c.nombre, semanaActualKey);
     if (st.renovacion === "renovado" || st.renovacion === "baja" || c.pagado) continue;
 
-    // El estado puede venir explícito en renData o auto-detectado del bono.
     const isReserva = st.renovacion === "reserva" || (c.esReserva && st.renovacion !== "baja");
     const isMitad = st.renovacion === "mitad" || (c.mitadPagada && !isReserva && st.renovacion !== "baja");
     const isPending = !isReserva && !isMitad && st.renovacion === "pendiente";
 
     if (isPending) {
-      cobrar.push({
+      pushCobrar({
         nombre: c.nombre,
         tipo: c.tipo || "",
         precio: +c.precio || 0,
         motivo: "Pendiente"
-      });
+      }, hora);
       yaIncluido.add(nn);
       continue;
     }
@@ -193,12 +239,12 @@ function decideListas({ persisted, renData, attendingSet, manana, semanaActualKe
       if (dias >= 7) {
         const importePagado = +c.importePagado || Math.round((+c.precio || 0) * 0.25);
         const restante = Math.max(0, (+c.precio || 0) - importePagado);
-        cobrar.push({
+        pushCobrar({
           nombre: c.nombre,
           tipo: c.tipo || "",
           precio: restante,
           motivo: `Reserva (+${dias} días)`
-        });
+        }, hora);
         yaIncluido.add(nn);
       }
       continue;
@@ -210,37 +256,38 @@ function decideListas({ persisted, renData, attendingSet, manana, semanaActualKe
       const dias = diffDays(manana, fv);
       if (dias === 42) {
         const restante = Math.round((+c.precio || 0) / 2);
-        cobrar.push({
+        pushCobrar({
           nombre: c.nombre,
           tipo: c.tipo || "",
           precio: restante,
           motivo: "2º PAGO"
-        });
+        }, hora);
         yaIncluido.add(nn);
       }
       continue;
     }
   }
 
-  // ─── A AVISAR: clientes en la semana siguiente que vienen mañana ───
+  // ─── A AVISAR ───
   for (const c of semanaSiguiente) {
     if (!c || !c.nombre) continue;
     const nn = normName(c.nombre);
     if (yaIncluido.has(nn)) continue;
-    if (!attendingSet.has(nn)) continue;
+    const hora = attendingMap.get(nn);
+    if (hora === undefined) continue;
 
     const st = estadoEn(c.nombre, semanaSiguienteKey);
     if (st.avisado) continue;
     if (st.renovacion !== "pendiente" || c.pagado) continue;
 
-    avisar.push({
+    pushAvisar({
       nombre: c.nombre,
       tipo: c.tipo || ""
-    });
+    }, hora);
     yaIncluido.add(nn);
   }
 
-  return { cobrar, avisar };
+  return { cobrarMan, cobrarTar, avisarMan, avisarTar };
 }
 
 // ─── Formato del mensaje ───────────────────────────────────────────────
@@ -255,15 +302,19 @@ function formatSemanaCorta(monday) {
   return `${monday.getDate()} ${MONTHS_ES_SHORT[monday.getMonth()]}`;
 }
 
-function buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday }) {
+function buildMessage({ manana, cobrar, avisar, turno }) {
+  // turno: "mañana" o "tarde"
   const lines = [];
+  const turnoLabel = turno === "mañana" ? "🌅 MAÑANA (7:00 - 14:00)" : "🌆 TARDE (14:00 - 22:00)";
+
   lines.push(`🟦 *Time2Train · Renovaciones*`);
   lines.push(`*${formatFechaCabecera(manana)}*`);
+  lines.push(`*${turnoLabel}*`);
   lines.push("");
 
   if (cobrar.length === 0 && avisar.length === 0) {
     lines.push("");
-    lines.push("Hoy no hay renovaciones que cobrar ni avisar 👍");
+    lines.push(`Sin renovaciones del turno de ${turno} 👍`);
     return lines.join("\n");
   }
 
@@ -371,46 +422,90 @@ export default async function handler(req, res) {
     // ─── Leer admisiones de mañana ───
     const host = req.headers.host;
     const admissions = await timpAdmissionsForDate(host, mananaStr);
-    const attendingSet = buildAttendingSet(admissions);
+    const attendingMap = buildAttendingMap(admissions);
 
-    // ─── Decidir listas ───
-    const { cobrar, avisar } = decideListas({
-      persisted, renData, attendingSet, manana,
+    // ─── Decidir listas (4 listas: cobrar/avisar × mañana/tarde) ───
+    const { cobrarMan, cobrarTar, avisarMan, avisarTar } = decideListas({
+      persisted, renData, attendingMap, manana,
       semanaActualKey, semanaSiguienteKey
     });
 
-    cobrar.sort((a, b) => normName(a.nombre).localeCompare(normName(b.nombre)));
-    avisar.sort((a, b) => normName(a.nombre).localeCompare(normName(b.nombre)));
+    // Ordenar alfabéticamente cada lista
+    const sorter = (a, b) => normName(a.nombre).localeCompare(normName(b.nombre));
+    cobrarMan.sort(sorter); cobrarTar.sort(sorter);
+    avisarMan.sort(sorter); avisarTar.sort(sorter);
 
-    let message = buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday });
-    if (staleWarning) message += `\n\n_${staleWarning}_`;
+    // Construir los dos mensajes
+    let msgManana = buildMessage({ manana, cobrar: cobrarMan, avisar: avisarMan, turno: "mañana" });
+    let msgTarde = buildMessage({ manana, cobrar: cobrarTar, avisar: avisarTar, turno: "tarde" });
+    if (staleWarning) {
+      msgManana += `\n\n_${staleWarning}_`;
+      msgTarde += `\n\n_${staleWarning}_`;
+    }
 
+    // ─── Modo dry_run: devuelve ambos mensajes en JSON ───
     if (dryRun) {
       return res.status(200).json({
         ok: true, dry_run: true,
         manana: mananaStr,
         semana_actual: semanaActualKey,
         semana_siguiente: semanaSiguienteKey,
-        attending_count: attendingSet.size,
-        cobrar_count: cobrar.length,
-        avisar_count: avisar.length,
-        cobrar: cobrar.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
-        avisar: avisar.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
+        attending_count: attendingMap.size,
+        mañana: {
+          cobrar_count: cobrarMan.length,
+          avisar_count: avisarMan.length,
+          cobrar: cobrarMan.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
+          avisar: avisarMan.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
+          message: msgManana
+        },
+        tarde: {
+          cobrar_count: cobrarTar.length,
+          avisar_count: avisarTar.length,
+          cobrar: cobrarTar.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
+          avisar: avisarTar.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
+          message: msgTarde
+        },
         last_update: persisted.lastUpdate || null,
-        stale_warning: staleWarning,
-        message
+        stale_warning: staleWarning
       });
     }
 
-    const send = await sendCallMeBot(phone, apikey, message);
-    return res.status(send.ok ? 200 : 502).json({
-      ok: send.ok,
+    // ─── Envío real: parámetro ?turno= determina cuál se manda ───
+    // Esto evita el timeout de 10s de Vercel en plan Hobby. El cron de
+    // GitHub Actions hace dos llamadas separadas con 65s de pausa entre
+    // ambas para no chocar con el rate limit de CallMeBot.
+    const turnoParam = (req.query && req.query.turno) || "ambos";
+
+    if (turnoParam === "manana" || turnoParam === "mañana") {
+      const send = await sendCallMeBot(phone, apikey, msgManana);
+      return res.status(send.ok ? 200 : 502).json({
+        ok: send.ok, turno: "mañana", manana: mananaStr,
+        cobrar_count: cobrarMan.length, avisar_count: avisarMan.length,
+        callmebot_status: send.status, callmebot_body: send.body.substring(0, 300)
+      });
+    }
+
+    if (turnoParam === "tarde") {
+      const send = await sendCallMeBot(phone, apikey, msgTarde);
+      return res.status(send.ok ? 200 : 502).json({
+        ok: send.ok, turno: "tarde", manana: mananaStr,
+        cobrar_count: cobrarTar.length, avisar_count: avisarTar.length,
+        callmebot_status: send.status, callmebot_body: send.body.substring(0, 300)
+      });
+    }
+
+    // turnoParam === "ambos" (legacy o llamada manual): manda los dos
+    // con espera de 65s. ATENCIÓN: solo funciona si Vercel permite
+    // ejecutar 90s+ (plan Pro o configuración maxDuration alta).
+    const sendMan = await sendCallMeBot(phone, apikey, msgManana);
+    await new Promise(resolve => setTimeout(resolve, 65000));
+    const sendTar = await sendCallMeBot(phone, apikey, msgTarde);
+
+    return res.status((sendMan.ok && sendTar.ok) ? 200 : 502).json({
+      ok: sendMan.ok && sendTar.ok,
       manana: mananaStr,
-      cobrar_count: cobrar.length,
-      avisar_count: avisar.length,
-      callmebot_status: send.status,
-      callmebot_body: send.body.substring(0, 300),
-      message
+      mañana: { cobrar_count: cobrarMan.length, avisar_count: avisarMan.length, callmebot_status: sendMan.status, callmebot_body: sendMan.body.substring(0, 300) },
+      tarde: { cobrar_count: cobrarTar.length, avisar_count: avisarTar.length, callmebot_status: sendTar.status, callmebot_body: sendTar.body.substring(0, 300) }
     });
   } catch (err) {
     console.error("[whatsapp-renovaciones] error:", err);

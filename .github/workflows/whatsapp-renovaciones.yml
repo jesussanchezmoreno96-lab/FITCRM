@@ -4,25 +4,20 @@ name: WhatsApp Renovaciones Diario
 # GitHub Actions usa UTC, así que:
 #   · Horario verano (CEST = UTC+2): 20:00 Madrid → 18:00 UTC
 #   · Horario invierno (CET  = UTC+1): 20:00 Madrid → 19:00 UTC
-# Ejecutamos AMBOS y dejamos que el endpoint no sea idempotente:
-# CallMeBot tiene rate-limit ~1msg/min, así que el segundo intento del
-# mismo día se convierte en duplicado solo si la API permite. Para
-# evitarlo, el cron de invierno solo dispara entre noviembre y marzo, y
-# el de verano entre marzo y noviembre. (Coincide bien con DST europeo.)
-
+# Ambos crons activos según mes para cubrir ambos.
 on:
   schedule:
-    # Verano (último domingo de marzo → último domingo de octubre): 18:00 UTC
+    # Verano: 18:00 UTC (marzo a octubre)
     - cron: '0 18 * 3-10 0-5'
-    # Invierno (noviembre → marzo): 19:00 UTC
+    # Invierno: 19:00 UTC (noviembre a marzo)
     - cron: '0 19 * 1-3,11,12 0-5'
-  workflow_dispatch:  # Permite lanzarlo a mano desde la UI de GitHub
+  workflow_dispatch:
 
 jobs:
   send:
     runs-on: ubuntu-latest
     steps:
-      - name: Disparar endpoint
+      - name: Disparar endpoint TURNO MAÑANA
         env:
           ENDPOINT_URL: ${{ secrets.WHATSAPP_ENDPOINT_URL }}
           CRON_SECRET:  ${{ secrets.WHATSAPP_CRON_SECRET }}
@@ -32,17 +27,15 @@ jobs:
             exit 1
           fi
 
-          # Comprobar día de la semana en hora Madrid (no UTC).
-          # Si es sábado, no enviamos.
-          DOW=$(TZ='Europe/Madrid' date +%u)   # 1=lun, 7=dom
+          DOW=$(TZ='Europe/Madrid' date +%u)
           if [ "$DOW" = "6" ]; then
             echo "Hoy es sábado en Madrid — no se envía aviso."
             exit 0
           fi
 
-          echo "Llamando al endpoint…"
+          echo "Llamando al endpoint (turno mañana)…"
           RESPONSE=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" \
-            "${ENDPOINT_URL}?secret=${CRON_SECRET}")
+            "${ENDPOINT_URL}?secret=${CRON_SECRET}&turno=manana")
           BODY=$(echo "$RESPONSE" | sed -e 's/HTTP_STATUS\:.*//g')
           STATUS=$(echo "$RESPONSE" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
 
@@ -51,6 +44,38 @@ jobs:
           echo "$BODY"
 
           if [ "$STATUS" != "200" ]; then
-            echo "::error::Endpoint devolvió status $STATUS"
+            echo "::error::Turno mañana devolvió status $STATUS"
+            exit 1
+          fi
+
+      - name: Pausa de 65 segundos (CallMeBot rate-limit)
+        run: |
+          DOW=$(TZ='Europe/Madrid' date +%u)
+          if [ "$DOW" = "6" ]; then exit 0; fi
+          sleep 65
+
+      - name: Disparar endpoint TURNO TARDE
+        env:
+          ENDPOINT_URL: ${{ secrets.WHATSAPP_ENDPOINT_URL }}
+          CRON_SECRET:  ${{ secrets.WHATSAPP_CRON_SECRET }}
+        run: |
+          DOW=$(TZ='Europe/Madrid' date +%u)
+          if [ "$DOW" = "6" ]; then
+            echo "Sábado, saltando turno tarde."
+            exit 0
+          fi
+
+          echo "Llamando al endpoint (turno tarde)…"
+          RESPONSE=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" \
+            "${ENDPOINT_URL}?secret=${CRON_SECRET}&turno=tarde")
+          BODY=$(echo "$RESPONSE" | sed -e 's/HTTP_STATUS\:.*//g')
+          STATUS=$(echo "$RESPONSE" | tr -d '\n' | sed -e 's/.*HTTP_STATUS://')
+
+          echo "HTTP $STATUS"
+          echo "Body:"
+          echo "$BODY"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Turno tarde devolvió status $STATUS"
             exit 1
           fi
