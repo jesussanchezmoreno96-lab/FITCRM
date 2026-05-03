@@ -964,11 +964,11 @@ export default function Renovaciones(props) {
             <button onClick={function () { upd(r.nombre, selWeek.key, "avisado", !data.avisado); }}
               title="Avisado"
               style={{
-                width: 22, height: 22, borderRadius: 5,
-                border: data.avisado ? "1px solid #3b82f6" : "1px solid " + T.border2,
-                background: data.avisado ? "#3b82f615" : "transparent",
+                width: 32, height: 32, borderRadius: 6,
+                border: data.avisado ? "1px solid " + T.text : "1px solid " + T.border2,
+                background: data.avisado ? (dk ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.06)") : "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", fontSize: 10, color: data.avisado ? "#3b82f6" : T.text3,
+                cursor: "pointer", fontSize: 16, fontWeight: 800, color: T.text,
                 padding: 0, flexShrink: 0
               }}>{data.avisado ? "✓" : "📢"}</button>
 
