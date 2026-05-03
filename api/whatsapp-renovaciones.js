@@ -1,49 +1,26 @@
 // ════════════════════════════════════════════════════════════════════════
-//  api/whatsapp-renovaciones.js
+//  api/whatsapp-renovaciones.js  (v2)
 //
-//  Endpoint serverless que envía un mensaje de WhatsApp con las
-//  renovaciones del día siguiente.
+//  Bot diario de WhatsApp para Time2Train.
+//  Lee la lista de renovaciones YA CALCULADA por el CRM (persistida en
+//  Supabase clave 'bonos_timp.renovaciones_persisted') y compone el
+//  mensaje del día siguiente.
 //
-//  Ejecución prevista: cron de GitHub Actions de domingo a viernes a las
-//  20:00 hora Madrid (es decir, mañana = lunes a sábado).
+//  Lógica: el cálculo de "qué cliente está en qué semana" lo hace el
+//  CRM en Renovaciones.jsx (con todo su cruce Excel + TIMP + filtros).
+//  Aquí solo aplicamos los filtros adicionales del aviso:
+//    · Cliente tiene clase reservada en TIMP para mañana.
+//    · A COBRAR: renueva esta semana, estado pendiente | reserva (>7d) | mitad (día 42).
+//    · A AVISAR: renueva la semana siguiente, pendiente, sin avisado:true.
 //
-//  Lógica:
-//    Sección A COBRAR
-//      · El cliente tiene clase reservada en TIMP para el día de mañana.
-//      · Su semana de renovación (renewMonday) es la semana del día
-//        siguiente al envío.
-//      · Está en estado pendiente | reserva (>7 días) | mitad (día 42).
+//  Variables de entorno (Vercel):
+//    · CALLMEBOT_PHONE
+//    · CALLMEBOT_APIKEY
+//    · WHATSAPP_CRON_SECRET
 //
-//    Sección A AVISAR
-//      · El cliente tiene clase reservada en TIMP para el día de mañana.
-//      · Su semana de renovación es la semana SIGUIENTE.
-//      · Estado pendiente.
-//      · Sin flag avisado:true en renData[clientName__weekKey].
-//
-//  Datos que lee de Supabase (tabla bonos_timp):
-//    · cuotas_vigentes  → bonos vivos (los mismos que muestra el CRM).
-//    · renovacion_data  → estados, avisados, movidos, etc.
-//    · client_blacklist → clientes a excluir.
-//
-//  Datos que lee de TIMP:
-//    · /admissions con date_from = mañana, date_to = mañana.
-//
-//  Variables de entorno requeridas (Vercel):
-//    · CALLMEBOT_PHONE       → 34680728857
-//    · CALLMEBOT_APIKEY      → 4129350
-//    · WHATSAPP_CRON_SECRET  → token largo aleatorio (lo genero yo)
-//    · TIMP_API_KEY          → ya existente, la usa /api/timp.js
-//    · SUPABASE_URL          → opcional, fallback al hardcoded
-//    · SUPABASE_KEY          → opcional, fallback al hardcoded
-//
-//  Modo prueba:
-//    GET /api/whatsapp-renovaciones?secret=XXX&dry_run=1
-//      → devuelve el mensaje en JSON sin enviarlo a WhatsApp.
-//    GET /api/whatsapp-renovaciones?secret=XXX
-//      → envía el WhatsApp y devuelve el resultado.
+//  Modo prueba: ?dry_run=1 → devuelve JSON sin enviar.
 // ════════════════════════════════════════════════════════════════════════
 
-// ─── Constantes ─────────────────────────────────────────────────────────
 const TIMP_CENTER = "ebb9a2c0-782e-4d77-b5eb-17d18a1f8949";
 const SUPA_URL_DEFAULT = "https://yvzearwbwwthquekqnnk.supabase.co";
 const SUPA_KEY_DEFAULT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
@@ -52,14 +29,11 @@ const MONTHS_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","ago
 const MONTHS_ES_SHORT = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const DAYS_ES = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 
-// ─── Helpers de fecha (todos en hora Madrid) ────────────────────────────
-// Vercel corre en UTC. Trabajar siempre con la zona Europe/Madrid para
-// que "mañana" = mañana en Madrid, no en UTC.
+// Si la persistencia tiene más de N horas, alertar (datos potencialmente obsoletos).
+const STALE_HOURS = 36;
 
+// ─── Helpers de fecha (Madrid) ─────────────────────────────────────────
 function nowMadrid() {
-  // Devuelve un Date que representa el instante actual interpretado como
-  // si el reloj de Madrid fuera la hora local. Es un truco pero funciona
-  // porque luego solo usamos las partes de fecha (no comparamos UTC).
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
     year: "numeric", month: "2-digit", day: "2-digit",
@@ -68,45 +42,25 @@ function nowMadrid() {
   });
   const parts = fmt.formatToParts(new Date());
   const get = k => parts.find(p => p.type === k).value;
-  return new Date(
-    +get("year"),
-    +get("month") - 1,
-    +get("day"),
-    +get("hour"),
-    +get("minute"),
-    +get("second")
-  );
+  return new Date(+get("year"), +get("month")-1, +get("day"), +get("hour"), +get("minute"), +get("second"));
 }
-
 function localKey(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-
 function getMonday(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
+  const x = new Date(d); x.setHours(0,0,0,0);
   const day = x.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  x.setDate(x.getDate() + diff);
+  x.setDate(x.getDate() + (day === 0 ? -6 : 1 - day));
   return x;
 }
-
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
 function diffDays(a, b) {
-  // a - b en días enteros
-  const ms = a.getTime() - b.getTime();
-  return Math.floor(ms / (1000 * 60 * 60 * 24));
+  const a2 = new Date(a); a2.setHours(0,0,0,0);
+  const b2 = new Date(b); b2.setHours(0,0,0,0);
+  return Math.floor((a2.getTime() - b2.getTime()) / 86400000);
 }
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-// ─── Helpers de nombre (igual que el CRM) ───────────────────────────────
 function normName(s) {
   if (!s) return "";
   return String(s).toLowerCase().trim()
@@ -114,32 +68,7 @@ function normName(s) {
     .replace(/\s+/g, " ");
 }
 
-function matchesName(a, b) {
-  const na = normName(a), nb = normName(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const wa = na.split(" "), wb = nb.split(" ");
-  if (wa.length < 2 || wb.length < 2) return false;
-  return wa[0] === wb[0] && wa[1] === wb[1];
-}
-
-function inBlacklist(nombre, blacklist) {
-  if (!blacklist || !blacklist.length) return false;
-  const n = normName(nombre);
-  return blacklist.some(b => {
-    const bn = normName(b);
-    if (!bn) return false;
-    const wa = n.split(" ").filter(Boolean);
-    const wb = bn.split(" ").filter(Boolean);
-    if (wa.length >= 1 && wb.length >= 1 && wa[0] === wb[0]) {
-      if (wb.length === 1) return true;
-      if (wa.length >= 2 && wb.length >= 2 && wa[1] === wb[1]) return true;
-    }
-    return n.indexOf(bn) >= 0;
-  });
-}
-
-// ─── Lectura de Supabase ────────────────────────────────────────────────
+// ─── Supabase ──────────────────────────────────────────────────────────
 async function supaGet(url, key, table) {
   const r = await fetch(`${url}/rest/v1/${table}?select=*`, {
     headers: { "apikey": key, "Authorization": `Bearer ${key}` }
@@ -148,20 +77,16 @@ async function supaGet(url, key, table) {
   return await r.json();
 }
 
-// ─── Lectura de TIMP (admisiones de un día) ─────────────────────────────
+// ─── TIMP: admisiones de un día ────────────────────────────────────────
 async function timpAdmissionsForDate(host, dateStr) {
-  // Reusa el proxy /api/timp del propio Vercel para no duplicar credenciales.
-  // host viene del request original (ej: fitcrm-beige.vercel.app).
   const proto = host.includes("localhost") ? "http" : "https";
   const base = `${proto}://${host}/api/timp`;
-
   const path = `branch_buildings/${TIMP_CENTER}/admissions%3Fdate_from=${dateStr}%26date_to=${dateStr}%26page=1`;
   const r1 = await fetch(`${base}?path=${path}`);
   if (!r1.ok) throw new Error(`TIMP admissions: ${r1.status}`);
   const d1 = await r1.json();
   let all = d1.collection || [];
   const totalPages = (d1.page_data && d1.page_data.total_pages) || 1;
-
   for (let p = 2; p <= totalPages; p++) {
     const pp = `branch_buildings/${TIMP_CENTER}/admissions%3Fdate_from=${dateStr}%26date_to=${dateStr}%26page=${p}`;
     const r = await fetch(`${base}?path=${pp}`);
@@ -172,8 +97,6 @@ async function timpAdmissionsForDate(host, dateStr) {
   return all;
 }
 
-// Devuelve un Set de nombres (en formato normalizado) que tienen
-// reserva válida (status = "valid") para el día indicado.
 function buildAttendingSet(admissions) {
   const set = new Set();
   for (const a of admissions) {
@@ -187,193 +110,150 @@ function buildAttendingSet(admissions) {
   return set;
 }
 
-// ─── Construcción de la lista de candidatos por semana ─────────────────
-// Esta es la versión MÍNIMA de la lógica de Renovaciones.jsx adaptada al
-// servidor. NO duplica el cruce con Excel de cuotas/reservas (eso ya está
-// reflejado en renData / cuotas_vigentes que el CRM persiste). Aquí
-// simplemente partimos del listado de bonos vivos y le aplicamos:
-//   · whitelist de tipo de bono (entrenamiento, no fisio/nutri/gympass)
-//   · filtro active_membership
-//   · blacklist
-//   · estado en renData (avisado, renovacion, segundoPago, etc)
+// ─── Lectura de la lista persistida ────────────────────────────────────
+//
+// Estructura esperada en bonos_timp.renovaciones_persisted:
+// {
+//   lastUpdate: "2026-05-03T14:30:00.000Z",
+//   weeks: {
+//     "2026-05-04": [
+//       {
+//         nombre: "Pablo Martínez",
+//         tipo: "Time pro trimestral",
+//         precio: 180,
+//         fechaValor: "2026-02-04T00:00:00",  // ISO string
+//         renewMonday: "2026-05-04",
+//         pagado: false,
+//         mitadPagada: false,
+//         esReserva: false,
+//         importePagado: 0,
+//         source: "bono",        // "bono" | "segundo_pago" | "pago_restante" | "movido" | "arrastre_impago"
+//         nextBooking: "...",
+//         clientId: "...",
+//         clientStatus: "activo"
+//       },
+//       ...
+//     ],
+//     ...
+//   }
+// }
 
-const TIPOS_VALIDOS = [
-  "time partner", "time plus", "time pro", "time pro+",
-  "time partner plus",
-  "bono 5", "bono 10", "bono 20",
-  "entrenamiento sesion", "entrenamiento sesión", "entrenamiento sesion dual"
-];
-const TIPOS_EXCLUIDOS = ["fisio", "nutri", "gympass"];
-
-function tipoEsValido(tipo) {
-  if (!tipo) return false;
-  const t = tipo.toLowerCase();
-  if (TIPOS_EXCLUIDOS.some(e => t.indexOf(e) >= 0)) return false;
-  return TIPOS_VALIDOS.some(v => t.indexOf(v) >= 0);
-}
-
-function buildEntries(bonos, blacklist) {
-  // Convierte la tabla bonos_timp.cuotas_vigentes (la que ya alimenta
-  // Renovaciones) en una lista de entries con los campos que usamos.
-  const out = [];
-  for (const b of bonos) {
-    if (!b || !b.nombre) continue;
-    if (inBlacklist(b.nombre, blacklist)) continue;
-    if (!tipoEsValido(b.tipoBono || b.concepto || "")) continue;
-
-    const fv = b.fechaValor ? new Date(b.fechaValor) : null;
-    if (!fv || isNaN(fv)) continue;
-
-    out.push({
-      nombre: b.nombre,
-      tipo: b.tipoBono || b.concepto || "",
-      precio: +b.precio || +b.total || 0,
-      fechaValor: fv,
-      renewMonday: getMonday(fv),
-      pagado: !!b.pagado,
-      fraccionado: !!b.fraccionado,
-      mitadPagada: !!b.mitadPagada,
-      esReserva: !!b.esReserva,
-      importePagado: +b.importePagado || 0
-    });
-  }
-  return out;
-}
-
-// ─── Lógica principal: quién va en COBRAR y quién en AVISAR ─────────────
-function decideListas({ entries, renData, attendingSet, manana, semanaActualKey, semanaSiguienteKey }) {
+// ─── Lógica de selección (igual que antes pero usando estado del CRM) ─
+function decideListas({ persisted, renData, attendingSet, manana, semanaActualKey, semanaSiguienteKey }) {
   const cobrar = [];
   const avisar = [];
 
-  // Helper para sacar el estado actual del cliente en una semana dada.
+  const weeksData = (persisted && persisted.weeks) || {};
+  const semanaActual = weeksData[semanaActualKey] || [];
+  const semanaSiguiente = weeksData[semanaSiguienteKey] || [];
+
+  // Helper para sacar el estado de un cliente en una semana concreta.
   function estadoEn(nombre, weekKey) {
     const k = `${nombre.toLowerCase().trim()}__${weekKey}`;
     const d = renData[k] || {};
     return {
       renovacion: d.renovacion || "pendiente",
       avisado: !!d.avisado,
-      segundoPago: !!d.segundoPago,
-      movido: !!d.movido,
       notas: d.notas || ""
     };
   }
 
-  // Para evitar duplicados (un mismo cliente con varios bonos antiguos).
   const yaIncluido = new Set();
 
-  for (const e of entries) {
-    const nombreNorm = normName(e.nombre);
-    if (yaIncluido.has(nombreNorm)) continue;
+  // ─── A COBRAR: clientes en la semana actual que vienen mañana ───
+  for (const c of semanaActual) {
+    if (!c || !c.nombre) continue;
+    const nn = normName(c.nombre);
+    if (yaIncluido.has(nn)) continue;
+    if (!attendingSet.has(nn)) continue;
 
-    // ¿Viene mañana?
-    if (!attendingSet.has(nombreNorm)) continue;
+    const st = estadoEn(c.nombre, semanaActualKey);
+    if (st.renovacion === "renovado" || st.renovacion === "baja" || c.pagado) continue;
 
-    const weekKey = localKey(e.renewMonday);
+    // El estado puede venir explícito en renData o auto-detectado del bono.
+    const isReserva = st.renovacion === "reserva" || (c.esReserva && st.renovacion !== "baja");
+    const isMitad = st.renovacion === "mitad" || (c.mitadPagada && !isReserva && st.renovacion !== "baja");
+    const isPending = !isReserva && !isMitad && st.renovacion === "pendiente";
 
-    // ─── Caso 1: renueva ESTA semana → A COBRAR ───
-    if (weekKey === semanaActualKey) {
-      const st = estadoEn(e.nombre, weekKey);
-
-      // Renovado o NoRenueva → fuera
-      if (st.renovacion === "renovado" || st.renovacion === "baja") continue;
-
-      // Pendiente → siempre dentro
-      if (st.renovacion === "pendiente") {
-        cobrar.push({ ...e, motivo: "Pendiente", precio: e.precio });
-        yaIncluido.add(nombreNorm);
-        continue;
-      }
-
-      // Reserva → solo si lleva +7 días desde fechaValor
-      if (st.renovacion === "reserva") {
-        const dias = diffDays(manana, e.fechaValor);
-        if (dias >= 7) {
-          const restante = Math.max(0, e.precio - (e.importePagado || Math.round(e.precio * 0.25)));
-          cobrar.push({ ...e, motivo: `Reserva (+${dias} días)`, precio: restante });
-          yaIncluido.add(nombreNorm);
-        }
-        continue;
-      }
-
-      // MitadPagada → solo si mañana = día 42 desde fechaValor
-      if (st.renovacion === "mitad") {
-        const dias = diffDays(manana, e.fechaValor);
-        if (dias === 42) {
-          const restante = Math.round(e.precio / 2);
-          cobrar.push({ ...e, motivo: "2º PAGO", precio: restante });
-          yaIncluido.add(nombreNorm);
-        }
-        continue;
-      }
-    }
-
-    // ─── Caso 2: renueva la SIGUIENTE semana → A AVISAR ───
-    if (weekKey === semanaSiguienteKey) {
-      const st = estadoEn(e.nombre, weekKey);
-      if (st.renovacion !== "pendiente") continue; // solo pendientes
-      if (st.avisado) continue;                    // ya avisado, fuera
-      avisar.push({ ...e });
-      yaIncluido.add(nombreNorm);
+    if (isPending) {
+      cobrar.push({
+        nombre: c.nombre,
+        tipo: c.tipo || "",
+        precio: +c.precio || 0,
+        motivo: "Pendiente"
+      });
+      yaIncluido.add(nn);
       continue;
     }
+
+    if (isReserva) {
+      const fv = c.fechaValor ? new Date(c.fechaValor) : null;
+      if (!fv || isNaN(fv)) continue;
+      const dias = diffDays(manana, fv);
+      if (dias >= 7) {
+        const importePagado = +c.importePagado || Math.round((+c.precio || 0) * 0.25);
+        const restante = Math.max(0, (+c.precio || 0) - importePagado);
+        cobrar.push({
+          nombre: c.nombre,
+          tipo: c.tipo || "",
+          precio: restante,
+          motivo: `Reserva (+${dias} días)`
+        });
+        yaIncluido.add(nn);
+      }
+      continue;
+    }
+
+    if (isMitad) {
+      const fv = c.fechaValor ? new Date(c.fechaValor) : null;
+      if (!fv || isNaN(fv)) continue;
+      const dias = diffDays(manana, fv);
+      if (dias === 42) {
+        const restante = Math.round((+c.precio || 0) / 2);
+        cobrar.push({
+          nombre: c.nombre,
+          tipo: c.tipo || "",
+          precio: restante,
+          motivo: "2º PAGO"
+        });
+        yaIncluido.add(nn);
+      }
+      continue;
+    }
+  }
+
+  // ─── A AVISAR: clientes en la semana siguiente que vienen mañana ───
+  for (const c of semanaSiguiente) {
+    if (!c || !c.nombre) continue;
+    const nn = normName(c.nombre);
+    if (yaIncluido.has(nn)) continue;
+    if (!attendingSet.has(nn)) continue;
+
+    const st = estadoEn(c.nombre, semanaSiguienteKey);
+    if (st.avisado) continue;
+    if (st.renovacion !== "pendiente" || c.pagado) continue;
+
+    avisar.push({
+      nombre: c.nombre,
+      tipo: c.tipo || ""
+    });
+    yaIncluido.add(nn);
   }
 
   return { cobrar, avisar };
 }
 
-// ─── Procesar entries de "segundo pago" desde renData ──────────────────
-// Cuando alguien marca "mitad pagada" en el CRM se crea una entrada en
-// renData con segundoPago:true y la weekKey del día 42. Eso ya está
-// reflejado en la lógica anterior (si mañana es exactamente día 42 y el
-// estado base es "mitad", aparece). Por simetría, los entries movidos
-// manualmente también entran si tienen una entrada renData en esa
-// semana SIN renovacion=renovado.
-
-function entriesFromRenData(renData) {
-  // Devuelve entries sintéticos para clientes que están en renData con
-  // segundoPago/movido pero cuyo bono original ya no está en cuotas_vigentes
-  // (ej: el bono ya caducó pero hay un 2º pago pendiente).
-  // Usamos esto SOLO para "A COBRAR" — no avisamos de cosas movidas.
-  const out = [];
-  for (const k of Object.keys(renData)) {
-    const d = renData[k];
-    if (!d || !d.clientName) continue;
-    if (!d.segundoPago && !d.movido) continue;
-    if (d.renovacion === "renovado" || d.renovacion === "baja") continue;
-    const parts = k.split("__");
-    if (parts.length < 2) continue;
-    const weekKey = parts[1];
-    const mon = new Date(weekKey + "T00:00:00");
-    if (isNaN(mon)) continue;
-    out.push({
-      nombre: d.clientName,
-      tipo: "",
-      precio: 0,
-      fechaValor: mon,
-      renewMonday: mon,
-      pagado: false,
-      esRenDataOnly: true,
-      notas: d.notas || ""
-    });
-  }
-  return out;
-}
-
-// ─── Formato del mensaje WhatsApp ───────────────────────────────────────
+// ─── Formato del mensaje ───────────────────────────────────────────────
 function formatPrecio(p) {
   if (!p || isNaN(p)) return "";
   return `${Math.round(+p)}€`;
 }
-
 function formatFechaCabecera(d) {
   return `${capitalize(DAYS_ES[d.getDay()])} ${d.getDate()} ${MONTHS_ES[d.getMonth()]}`;
 }
-
 function formatSemanaCorta(monday) {
   return `${monday.getDate()} ${MONTHS_ES_SHORT[monday.getMonth()]}`;
 }
-
-function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 function buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday }) {
   const lines = [];
@@ -420,7 +300,7 @@ function buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday }) {
   return lines.join("\n");
 }
 
-// ─── Envío a CallMeBot ──────────────────────────────────────────────────
+// ─── CallMeBot ─────────────────────────────────────────────────────────
 async function sendCallMeBot(phone, apikey, text) {
   const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(apikey)}`;
   const r = await fetch(url);
@@ -428,18 +308,13 @@ async function sendCallMeBot(phone, apikey, text) {
   return { ok: r.ok && !/error|too many|not found/i.test(body), status: r.status, body };
 }
 
-// ─── Handler ────────────────────────────────────────────────────────────
+// ─── Handler ───────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   try {
-    // Auth: parámetro secret debe coincidir con la variable de entorno
     const secret = (req.query && req.query.secret) || "";
     const expected = process.env.WHATSAPP_CRON_SECRET;
-    if (!expected) {
-      return res.status(500).json({ error: "Missing WHATSAPP_CRON_SECRET in env" });
-    }
-    if (secret !== expected) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    if (!expected) return res.status(500).json({ error: "Missing WHATSAPP_CRON_SECRET in env" });
+    if (secret !== expected) return res.status(401).json({ error: "Unauthorized" });
 
     const dryRun = req.query && (req.query.dry_run === "1" || req.query.dry_run === "true");
 
@@ -455,7 +330,7 @@ export default async function handler(req, res) {
     // ─── Calcular fechas ───
     const today = nowMadrid();
     const manana = addDays(today, 1);
-    manana.setHours(0, 0, 0, 0);
+    manana.setHours(0,0,0,0);
     const mananaStr = localKey(manana);
     const semanaActualMonday = getMonday(manana);
     const semanaSiguienteMonday = addDays(semanaActualMonday, 7);
@@ -464,43 +339,58 @@ export default async function handler(req, res) {
 
     // ─── Leer Supabase ───
     const rows = await supaGet(supaUrl, supaKey, "bonos_timp");
-    let bonos = [], renData = {}, blacklist = [];
+    let renData = {};
+    let persisted = null;
     for (const r of rows) {
-      if (r.id === "cuotas_vigentes") bonos = r.data || [];
-      else if (r.id === "renovacion_data") renData = r.data || {};
-      else if (r.id === "client_blacklist") blacklist = r.data || [];
+      if (r.id === "renovacion_data") renData = r.data || {};
+      else if (r.id === "renovaciones_persisted") persisted = r.data || null;
     }
 
-    // ─── Leer admisiones de mañana en TIMP ───
+    // ─── Validar persisted ───
+    if (!persisted || !persisted.weeks) {
+      const msg = "⚠️ La lista de renovaciones no está disponible. Abre el CRM en Renovaciones para que se actualice.";
+      if (dryRun) {
+        return res.status(200).json({
+          ok: false, dry_run: true,
+          error: "No persisted data",
+          message: msg
+        });
+      }
+      // En modo real, igualmente avisamos por WhatsApp para que sepas qué pasó.
+      const send = await sendCallMeBot(phone, apikey, msg);
+      return res.status(200).json({ ok: false, error: "No persisted data", callmebot: send });
+    }
+
+    // Comprobar antigüedad
+    let staleWarning = null;
+    if (persisted.lastUpdate) {
+      const last = new Date(persisted.lastUpdate);
+      const ageHours = (Date.now() - last.getTime()) / (1000*60*60);
+      if (ageHours > STALE_HOURS) {
+        staleWarning = `⚠️ Lista cacheada hace ${Math.round(ageHours)}h. Considera abrir el CRM para refrescar.`;
+      }
+    }
+
+    // ─── Leer admisiones de mañana ───
     const host = req.headers.host;
     const admissions = await timpAdmissionsForDate(host, mananaStr);
     const attendingSet = buildAttendingSet(admissions);
 
-    // ─── Construir entries (bonos + entradas renData de 2º pago/movidos) ───
-    const baseEntries = buildEntries(bonos, blacklist);
-    const renEntries = entriesFromRenData(renData)
-      .filter(e => !inBlacklist(e.nombre, blacklist))
-      // Evitar duplicados con bonos
-      .filter(e => !baseEntries.some(b => matchesName(b.nombre, e.nombre) && localKey(b.renewMonday) === localKey(e.renewMonday)));
-    const entries = baseEntries.concat(renEntries);
-
     // ─── Decidir listas ───
     const { cobrar, avisar } = decideListas({
-      entries, renData, attendingSet, manana,
+      persisted, renData, attendingSet, manana,
       semanaActualKey, semanaSiguienteKey
     });
 
-    // Ordenar alfabéticamente
     cobrar.sort((a, b) => normName(a.nombre).localeCompare(normName(b.nombre)));
     avisar.sort((a, b) => normName(a.nombre).localeCompare(normName(b.nombre)));
 
-    const message = buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday });
+    let message = buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday });
+    if (staleWarning) message += `\n\n_${staleWarning}_`;
 
-    // ─── Modo prueba ───
     if (dryRun) {
       return res.status(200).json({
-        ok: true,
-        dry_run: true,
+        ok: true, dry_run: true,
         manana: mananaStr,
         semana_actual: semanaActualKey,
         semana_siguiente: semanaSiguienteKey,
@@ -509,11 +399,12 @@ export default async function handler(req, res) {
         avisar_count: avisar.length,
         cobrar: cobrar.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
         avisar: avisar.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
+        last_update: persisted.lastUpdate || null,
+        stale_warning: staleWarning,
         message
       });
     }
 
-    // ─── Envío real ───
     const send = await sendCallMeBot(phone, apikey, message);
     return res.status(send.ok ? 200 : 502).json({
       ok: send.ok,

@@ -1517,6 +1517,9 @@ export default function App(){
     onSaveRenData={function(newData){
       dbSave("bonos_timp","renovacion_data",newData).catch(function(){});
     }}
+    onSavePersistedWeeks={function(payload){
+      dbSave("bonos_timp","renovaciones_persisted",payload).catch(function(){});
+    }}
     onChangeStatus={function(name,status){
       sv(function(p){return p.map(function(c){
         return matchesName(c.name,name) ? Object.assign({},c,{status:status}) : c;

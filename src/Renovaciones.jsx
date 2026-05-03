@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import RetrasosPago from "./RetrasosPago.jsx";
 
 var DAYS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
@@ -93,6 +93,7 @@ export default function Renovaciones(props) {
   var onSaveRenData = props.onSaveRenData;
   var onChangeStatus = props.onChangeStatus;
   var importCuotas = props.importCuotas;
+  var onSavePersistedWeeks = props.onSavePersistedWeeks;
 
   // Tab activo: "renovaciones" o "retrasos"
   var tab_ = useState("renovaciones"), tab = tab_[0], setTab = tab_[1];
@@ -584,6 +585,64 @@ export default function Renovaciones(props) {
       });
     });
   }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  PERSISTENCIA: guardar el weekList ya calculado en Supabase
+  //  para que el bot de WhatsApp lo pueda leer sin recalcular.
+  //  · Serializa Date → ISO string (Supabase no acepta objetos Date).
+  //  · Compara con el último snapshot guardado para no escribir si no
+  //    ha cambiado.
+  //  · Debounce de 2 segundos para no saturar Supabase.
+  // ══════════════════════════════════════════════════════════════════════
+  var persistedRef = useRef({ json: "", timer: null });
+  useEffect(function () {
+    if (!onSavePersistedWeeks) return;
+    if (!weekList || weekList.length === 0) return;
+
+    var weeksOut = {};
+    weekList.forEach(function (w) {
+      if (!w || !w.key) return;
+      weeksOut[w.key] = (w.clients || []).map(function (c) {
+        return {
+          nombre: c.nombre,
+          tipo: c.tipo || "",
+          precio: +c.precio || 0,
+          fechaValor: c.fechaValor instanceof Date ? c.fechaValor.toISOString() : (c.fechaValor || null),
+          renewMonday: c.renewMonday instanceof Date ? c.renewMonday.toISOString() : (c.renewMonday || null),
+          pagado: !!c.pagado,
+          mitadPagada: !!c.mitadPagada,
+          esReserva: !!c.esReserva,
+          fraccionado: !!c.fraccionado,
+          importePagado: +c.importePagado || 0,
+          source: c.source || "bono",
+          nextBooking: c.nextBooking instanceof Date ? c.nextBooking.toISOString() : (c.nextBooking || null),
+          clientId: c.clientId || null,
+          clientStatus: c.clientStatus || null,
+          restante: +c.restante || 0
+        };
+      });
+    });
+
+    var payload = { lastUpdate: new Date().toISOString(), weeks: weeksOut };
+    var json = JSON.stringify(payload.weeks);
+
+    // Si no cambió la lista, no escribimos.
+    if (json === persistedRef.current.json) return;
+    persistedRef.current.json = json;
+
+    // Debounce: cancelar timer anterior y agendar nuevo.
+    if (persistedRef.current.timer) clearTimeout(persistedRef.current.timer);
+    persistedRef.current.timer = setTimeout(function () {
+      try { onSavePersistedWeeks(payload); } catch (e) { console.error("[persistedWeeks]", e); }
+    }, 2000);
+
+    return function () {
+      if (persistedRef.current.timer) {
+        clearTimeout(persistedRef.current.timer);
+        persistedRef.current.timer = null;
+      }
+    };
+  }, [bonos, cuotasExcel, reservasExcel, renData, blacklist]);
 
   // Auto-select
   var selWeek = weekList.find(function (w) { return w.key === renWeek; });
