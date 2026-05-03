@@ -272,7 +272,7 @@ function buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday }) {
     lines.push("*💸 A COBRAR*");
     lines.push("");
     cobrar.forEach((c, i) => {
-      lines.push(`${i + 1}. ${c.nombre}`);
+      lines.push(`${i + 1}. _${c.nombre}_`);
       const trozos = [];
       if (c.tipo) trozos.push(c.tipo);
       const p = formatPrecio(c.precio);
@@ -285,15 +285,12 @@ function buildMessage({ manana, cobrar, avisar, semanaSiguienteMonday }) {
   if (avisar.length > 0) {
     lines.push("");
     lines.push("");
-    lines.push("*🔔 A AVISAR*");
+    lines.push("*🔔 AVISAR SEMANA QUE VIENE*");
     lines.push("");
     const idxStart = cobrar.length;
     avisar.forEach((a, i) => {
-      lines.push(`${idxStart + i + 1}. ${a.nombre}`);
-      const trozos = [];
-      if (a.tipo) trozos.push(a.tipo);
-      trozos.push(`renueva la semana del ${formatSemanaCorta(semanaSiguienteMonday)}`);
-      lines.push(`   ${trozos.join(" · ")}`);
+      lines.push(`${idxStart + i + 1}. _${a.nombre}_`);
+      if (a.tipo) lines.push(`   ${a.tipo}`);
     });
   }
 
