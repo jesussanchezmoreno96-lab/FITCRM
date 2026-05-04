@@ -329,11 +329,11 @@ export default function App(){
   //  Se detiene cuando: collection vacío, sin cambios, o hard cap.
   // ══════════════════════════════════════════════════════════════════════
   function fetchAllPages(basePath,qs){
-    var MAX_PAGES=80; // hard cap de seguridad (767 clientes / 25 ~ 31 páginas)
+    var MAX_PAGES=10; // hard cap de seguridad (con per_page=1000 → 10000 reg max)
     var results=[];
     function getOne(page){
       var sep=qs?"%26":"%3F";
-      var suffix=qs?qs+sep+"page="+page:"%3Fpage="+page;
+      var suffix=qs?qs+sep+"page="+page+"%26per_page=1000":"%3Fpage="+page+"%26per_page=1000";
       return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/"+basePath+suffix)
         .then(function(r){return r.json();});
     }
@@ -342,8 +342,8 @@ export default function App(){
       return getOne(page).then(function(data){
         if(!data||!data.collection||data.collection.length===0)return results;
         results=results.concat(data.collection);
-        // Si la página devuelve menos de lo normal (default 25), asumimos fin
-        if(data.collection.length<25)return results;
+        // Si la página devuelve menos de 1000 (page_size pedido), es la última
+        if(data.collection.length<1000)return results;
         return loop(page+1);
       }).catch(function(err){
         console.error("[TIMP] Error en "+basePath+" page "+page+":",err);
