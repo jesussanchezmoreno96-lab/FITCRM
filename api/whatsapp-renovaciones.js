@@ -179,7 +179,6 @@ function decideListas({ persisted, renData, attendingMap, manana, semanaActualKe
   const avisarTar = [];
 
   const weeksData = (persisted && persisted.weeks) || {};
-  const semanaActual = weeksData[semanaActualKey] || [];
   const semanaSiguiente = weeksData[semanaSiguienteKey] || [];
 
   function estadoEn(nombre, weekKey) {
@@ -207,65 +206,119 @@ function decideListas({ persisted, renData, attendingMap, manana, semanaActualKe
   const yaIncluido = new Set();
 
   // ─── A COBRAR ───
-  for (const c of semanaActual) {
-    if (!c || !c.nombre) continue;
-    const nn = normName(c.nombre);
-    if (yaIncluido.has(nn)) continue;
-    const hora = attendingMap.get(nn);
-    if (hora === undefined) continue; // no viene mañana
+  // Recolectamos candidatos de la semana actual y de TODAS las semanas
+  // pasadas con entries pendientes. Después consolidamos a una línea por
+  // cliente: motivo/precio del más reciente aplicable; sufijo "⚠️ retraso
+  // DD/MM" si hay alguna pasada pendiente (fecha = lunes de la pasada
+  // más antigua); sufijo "💵" si el bono original era a precio 0.
+  const candidatosPorCliente = new Map();
 
-    const st = estadoEn(c.nombre, semanaActualKey);
-    if (st.renovacion === "renovado" || st.renovacion === "baja" || c.pagado) continue;
+  const weekKeysOrdenadas = Object.keys(weeksData)
+    .filter(wk => wk <= semanaActualKey)
+    .sort();
 
-    const isReserva = st.renovacion === "reserva" || (c.esReserva && st.renovacion !== "baja");
-    const isMitad = st.renovacion === "mitad" || (c.mitadPagada && !isReserva && st.renovacion !== "baja");
-    const isPending = !isReserva && !isMitad && st.renovacion === "pendiente";
+  for (const wk of weekKeysOrdenadas) {
+    const isActual = wk === semanaActualKey;
+    const lista = weeksData[wk] || [];
+    for (const c of lista) {
+      if (!c || !c.nombre) continue;
+      const nn = normName(c.nombre);
+      const hora = attendingMap.get(nn);
+      if (hora === undefined) continue; // no viene mañana
 
-    if (isPending) {
-      pushCobrar({
-        nombre: c.nombre,
-        tipo: c.tipo || "",
-        precio: +c.precio || 0,
-        motivo: "Pendiente"
-      }, hora);
-      yaIncluido.add(nn);
-      continue;
-    }
+      // Efectivo pendiente: bono original a 0€ que TIMP marca pagado=true.
+      // Excluimos las "fuentes" cuyo precio 0 significa "restante ya cobrado".
+      const esEfectivoPendiente =
+        (c.precio === 0 || c.precio == 0) &&
+        c.source !== "segundo_pago" &&
+        c.source !== "movido" &&
+        c.source !== "pago_restante" &&
+        c.source !== "calculado";
 
-    if (isReserva) {
-      const fv = c.fechaValor ? new Date(c.fechaValor) : null;
-      if (!fv || isNaN(fv)) continue;
-      const dias = diffDays(manana, fv);
-      if (dias >= 7) {
-        const importePagado = +c.importePagado || Math.round((+c.precio || 0) * 0.25);
-        const restante = Math.max(0, (+c.precio || 0) - importePagado);
-        pushCobrar({
+      if (c.pagado && !esEfectivoPendiente) continue;
+
+      const st = estadoEn(c.nombre, wk);
+      if (st.renovacion === "renovado" || st.renovacion === "baja") continue;
+
+      let item = null;
+
+      if (isActual) {
+        const isReserva = st.renovacion === "reserva" || (c.esReserva && st.renovacion !== "baja");
+        const isMitad = st.renovacion === "mitad" || (c.mitadPagada && !isReserva && st.renovacion !== "baja");
+        const isPending = !isReserva && !isMitad && (st.renovacion === "pendiente" || !st.renovacion);
+
+        if (isPending) {
+          item = {
+            nombre: c.nombre,
+            tipo: c.tipo || "",
+            precio: +c.precio || 0,
+            motivo: "Pendiente",
+            efectivo: esEfectivoPendiente
+          };
+        } else if (isReserva) {
+          const fv = c.fechaValor ? new Date(c.fechaValor) : null;
+          if (!fv || isNaN(fv)) continue;
+          const dias = diffDays(manana, fv);
+          if (dias < 7) continue;
+          const importePagado = +c.importePagado || Math.round((+c.precio || 0) * 0.25);
+          const restante = Math.max(0, (+c.precio || 0) - importePagado);
+          item = {
+            nombre: c.nombre,
+            tipo: c.tipo || "",
+            precio: restante,
+            motivo: `Reserva (+${dias} días)`,
+            efectivo: false
+          };
+        } else if (isMitad) {
+          const fv = c.fechaValor ? new Date(c.fechaValor) : null;
+          if (!fv || isNaN(fv)) continue;
+          const dias = diffDays(manana, fv);
+          if (dias !== 42) continue;
+          const restante = Math.round((+c.precio || 0) / 2);
+          item = {
+            nombre: c.nombre,
+            tipo: c.tipo || "",
+            precio: restante,
+            motivo: "2º PAGO",
+            efectivo: false
+          };
+        }
+      } else {
+        // Semana pasada: solo aceptamos pendiente puro.
+        if (st.renovacion && st.renovacion !== "pendiente") continue;
+        item = {
           nombre: c.nombre,
           tipo: c.tipo || "",
-          precio: restante,
-          motivo: `Reserva (+${dias} días)`
-        }, hora);
-        yaIncluido.add(nn);
+          precio: +c.precio || 0,
+          motivo: "Pendiente",
+          efectivo: esEfectivoPendiente
+        };
       }
-      continue;
-    }
 
-    if (isMitad) {
-      const fv = c.fechaValor ? new Date(c.fechaValor) : null;
-      if (!fv || isNaN(fv)) continue;
-      const dias = diffDays(manana, fv);
-      if (dias === 42) {
-        const restante = Math.round((+c.precio || 0) / 2);
-        pushCobrar({
-          nombre: c.nombre,
-          tipo: c.tipo || "",
-          precio: restante,
-          motivo: "2º PAGO"
-        }, hora);
-        yaIncluido.add(nn);
+      if (!item) continue;
+
+      let bucket = candidatosPorCliente.get(nn);
+      if (!bucket) {
+        bucket = { hora, candidatos: [] };
+        candidatosPorCliente.set(nn, bucket);
       }
-      continue;
+      bucket.candidatos.push({ wk, item, isActual });
     }
+  }
+
+  // Consolidar a una línea por cliente.
+  for (const [nn, { hora, candidatos }] of candidatosPorCliente) {
+    if (!candidatos.length) continue;
+    candidatos.sort((a, b) => a.wk.localeCompare(b.wk));
+    const masReciente = candidatos[candidatos.length - 1];
+    const finalItem = { ...masReciente.item };
+    const masAntiguaPasada = candidatos.find(x => !x.isActual);
+    if (masAntiguaPasada) {
+      const [, mm, dd] = masAntiguaPasada.wk.split("-");
+      finalItem.retraso = `${dd}/${mm}`;
+    }
+    pushCobrar(finalItem, hora);
+    yaIncluido.add(nn);
   }
 
   // ─── A AVISAR ───
@@ -329,7 +382,10 @@ function buildMessage({ manana, cobrar, avisar, turno }) {
       const p = formatPrecio(c.precio);
       if (p) trozos.push(p);
       if (c.motivo) trozos.push(c.motivo);
-      lines.push(`   ${trozos.join(" · ")}`);
+      let detalle = `   ${trozos.join(" · ")}`;
+      if (c.efectivo) detalle += ` 💵`;
+      if (c.retraso) detalle += ` ⚠️ retraso ${c.retraso}`;
+      lines.push(detalle);
     });
   }
 
@@ -454,14 +510,14 @@ export default async function handler(req, res) {
         mañana: {
           cobrar_count: cobrarMan.length,
           avisar_count: avisarMan.length,
-          cobrar: cobrarMan.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
+          cobrar: cobrarMan.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo, efectivo: c.efectivo, retraso: c.retraso })),
           avisar: avisarMan.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
           message: msgManana
         },
         tarde: {
           cobrar_count: cobrarTar.length,
           avisar_count: avisarTar.length,
-          cobrar: cobrarTar.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo })),
+          cobrar: cobrarTar.map(c => ({ nombre: c.nombre, tipo: c.tipo, precio: c.precio, motivo: c.motivo, efectivo: c.efectivo, retraso: c.retraso })),
           avisar: avisarTar.map(a => ({ nombre: a.nombre, tipo: a.tipo })),
           message: msgTarde
         },
