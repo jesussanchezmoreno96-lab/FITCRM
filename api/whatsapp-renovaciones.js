@@ -412,6 +412,41 @@ async function sendCallMeBot(phone, apikey, text) {
   return { ok: r.ok && !/error|too many|not found/i.test(body), status: r.status, body };
 }
 
+// ─── Resolución de destinatarios ───────────────────────────────────────
+// Cada destinatario indica a qué turnos quiere recibir mensajes.
+// PRIMARY recibe ambos; MORNING solo mañana; EVENING solo tarde.
+// Compatibilidad: si DEST_PRIMARY_* no está, cae a CALLMEBOT_*.
+function resolveDestinatarios() {
+  const list = [];
+  const primaryPhone = process.env.DEST_PRIMARY_PHONE || process.env.CALLMEBOT_PHONE;
+  const primaryApikey = process.env.DEST_PRIMARY_APIKEY || process.env.CALLMEBOT_APIKEY;
+  if (primaryPhone && primaryApikey) {
+    list.push({ id: "primary", phone: primaryPhone, apikey: primaryApikey, turnos: ["mañana", "tarde"] });
+  }
+  if (process.env.DEST_MORNING_PHONE && process.env.DEST_MORNING_APIKEY) {
+    list.push({ id: "morning", phone: process.env.DEST_MORNING_PHONE, apikey: process.env.DEST_MORNING_APIKEY, turnos: ["mañana"] });
+  }
+  if (process.env.DEST_EVENING_PHONE && process.env.DEST_EVENING_APIKEY) {
+    list.push({ id: "evening", phone: process.env.DEST_EVENING_PHONE, apikey: process.env.DEST_EVENING_APIKEY, turnos: ["tarde"] });
+  }
+  return list;
+}
+
+async function enviarATurno(turno, message, destinatarios) {
+  const targets = destinatarios.filter(d => d.turnos.includes(turno));
+  const results = await Promise.allSettled(
+    targets.map(d => sendCallMeBot(d.phone, d.apikey, message))
+  );
+  return targets.map((d, i) => {
+    const r = results[i];
+    if (r.status === "rejected") {
+      return { destinatario: d.id, status: "fail", error: String((r.reason && r.reason.message) || r.reason) };
+    }
+    if (r.value.ok) return { destinatario: d.id, status: "ok" };
+    return { destinatario: d.id, status: "fail", error: `HTTP ${r.value.status}: ${(r.value.body || "").substring(0, 200)}` };
+  });
+}
+
 // ─── Handler ───────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   try {
@@ -422,10 +457,9 @@ export default async function handler(req, res) {
 
     const dryRun = req.query && (req.query.dry_run === "1" || req.query.dry_run === "true");
 
-    const phone = process.env.CALLMEBOT_PHONE;
-    const apikey = process.env.CALLMEBOT_APIKEY;
-    if (!dryRun && (!phone || !apikey)) {
-      return res.status(500).json({ error: "Missing CALLMEBOT_PHONE or CALLMEBOT_APIKEY in env" });
+    const destinatarios = resolveDestinatarios();
+    if (!dryRun && destinatarios.length === 0) {
+      return res.status(500).json({ error: "No hay destinatarios configurados (define DEST_PRIMARY_PHONE/APIKEY o CALLMEBOT_PHONE/APIKEY)" });
     }
 
     const supaUrl = process.env.SUPABASE_URL || SUPA_URL_DEFAULT;
@@ -461,8 +495,19 @@ export default async function handler(req, res) {
         });
       }
       // En modo real, igualmente avisamos por WhatsApp para que sepas qué pasó.
-      const send = await sendCallMeBot(phone, apikey, msg);
-      return res.status(200).json({ ok: false, error: "No persisted data", callmebot: send });
+      // Mandamos a TODOS los destinatarios configurados (sin filtro de turno),
+      // porque es un error admin que todos deberían ver.
+      const results = await Promise.allSettled(
+        destinatarios.map(d => sendCallMeBot(d.phone, d.apikey, msg))
+      );
+      const envios = destinatarios.map((d, i) => {
+        const r = results[i];
+        if (r.status === "rejected") {
+          return { destinatario: d.id, status: "fail", error: String((r.reason && r.reason.message) || r.reason) };
+        }
+        return { destinatario: d.id, status: r.value.ok ? "ok" : "fail", error: r.value.ok ? undefined : `HTTP ${r.value.status}` };
+      });
+      return res.status(200).json({ ok: false, error: "No persisted data", envios });
     }
 
     // Comprobar antigüedad
@@ -533,35 +578,39 @@ export default async function handler(req, res) {
     const turnoParam = (req.query && req.query.turno) || "ambos";
 
     if (turnoParam === "manana" || turnoParam === "mañana") {
-      const send = await sendCallMeBot(phone, apikey, msgManana);
-      return res.status(send.ok ? 200 : 502).json({
-        ok: send.ok, turno: "mañana", manana: mananaStr,
+      const envios = await enviarATurno("mañana", msgManana, destinatarios);
+      const allOk = envios.length > 0 && envios.every(e => e.status === "ok");
+      return res.status(allOk ? 200 : 500).json({
+        ok: allOk, turno: "mañana", manana: mananaStr,
         cobrar_count: cobrarMan.length, avisar_count: avisarMan.length,
-        callmebot_status: send.status, callmebot_body: send.body.substring(0, 300)
+        envios
       });
     }
 
     if (turnoParam === "tarde") {
-      const send = await sendCallMeBot(phone, apikey, msgTarde);
-      return res.status(send.ok ? 200 : 502).json({
-        ok: send.ok, turno: "tarde", manana: mananaStr,
+      const envios = await enviarATurno("tarde", msgTarde, destinatarios);
+      const allOk = envios.length > 0 && envios.every(e => e.status === "ok");
+      return res.status(allOk ? 200 : 500).json({
+        ok: allOk, turno: "tarde", manana: mananaStr,
         cobrar_count: cobrarTar.length, avisar_count: avisarTar.length,
-        callmebot_status: send.status, callmebot_body: send.body.substring(0, 300)
+        envios
       });
     }
 
     // turnoParam === "ambos" (legacy o llamada manual): manda los dos
     // con espera de 65s. ATENCIÓN: solo funciona si Vercel permite
     // ejecutar 90s+ (plan Pro o configuración maxDuration alta).
-    const sendMan = await sendCallMeBot(phone, apikey, msgManana);
+    const enviosMan = await enviarATurno("mañana", msgManana, destinatarios);
     await new Promise(resolve => setTimeout(resolve, 65000));
-    const sendTar = await sendCallMeBot(phone, apikey, msgTarde);
+    const enviosTar = await enviarATurno("tarde", msgTarde, destinatarios);
+    const totalEnvios = enviosMan.length + enviosTar.length;
+    const allOk = totalEnvios > 0 && [...enviosMan, ...enviosTar].every(e => e.status === "ok");
 
-    return res.status((sendMan.ok && sendTar.ok) ? 200 : 502).json({
-      ok: sendMan.ok && sendTar.ok,
+    return res.status(allOk ? 200 : 500).json({
+      ok: allOk,
       manana: mananaStr,
-      mañana: { cobrar_count: cobrarMan.length, avisar_count: avisarMan.length, callmebot_status: sendMan.status, callmebot_body: sendMan.body.substring(0, 300) },
-      tarde: { cobrar_count: cobrarTar.length, avisar_count: avisarTar.length, callmebot_status: sendTar.status, callmebot_body: sendTar.body.substring(0, 300) }
+      mañana: { cobrar_count: cobrarMan.length, avisar_count: avisarMan.length, envios: enviosMan },
+      tarde:  { cobrar_count: cobrarTar.length, avisar_count: avisarTar.length, envios: enviosTar }
     });
   } catch (err) {
     console.error("[whatsapp-renovaciones] error:", err);
