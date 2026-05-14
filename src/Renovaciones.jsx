@@ -126,6 +126,8 @@ export default function Renovaciones(props) {
   var moveTarget_ = _(""), moveTarget = moveTarget_[0], setMoveTarget = moveTarget_[1];
   var bl_ = _(false), showBl = bl_[0], setShowBl = bl_[1];
   var blNew_ = _(""), blNew = blNew_[0], setBlNew = blNew_[1];
+  var editPrice_ = _(null), editPrice = editPrice_[0], setEditPrice = editPrice_[1];
+  var priceTmp_ = _(""), priceTmp = priceTmp_[0], setPriceTmp = priceTmp_[1];
 
   if (!bonos.length) {
     return (<div>
@@ -664,6 +666,17 @@ export default function Renovaciones(props) {
     if (setRenData) setRenData(n);
     if (onSaveRenData) onSaveRenData(n);
   }
+  function getPrecio(nombre, weekKey, precioOriginal) {
+    var d = rd(nombre, weekKey);
+    if (d.precioCustom !== undefined && d.precioCustom !== null && d.precioCustom !== "") {
+      return +d.precioCustom;
+    }
+    return precioOriginal;
+  }
+  function isPrecioEditado(nombre, weekKey) {
+    var d = rd(nombre, weekKey);
+    return d.precioCustom !== undefined && d.precioCustom !== null && d.precioCustom !== "";
+  }
 
   // Notifications
   var thisWeekData = weekList.find(function (w) { return w.monday.getTime() === thisMonday.getTime(); });
@@ -933,6 +946,11 @@ export default function Renovaciones(props) {
         // Is this a "segundo pago" entry?
         var isSegundoPago = r.source === "segundo_pago";
 
+        // Precio efectivo (puede haber sido editado a mano)
+        var rkPrecio = rk(r.nombre, selWeek.key);
+        var precioMostrar = getPrecio(r.nombre, selWeek.key, r.precio);
+        var editadoPrecio = isPrecioEditado(r.nombre, selWeek.key);
+
         return <div key={i} style={{
           padding: "4px 12px", borderBottom: "1.5px solid " + (dk ? "rgba(255,255,255,.20)" : "rgba(0,0,0,.18)"),
           background: rowBg, opacity: isBaja ? 0.6 : 1
@@ -947,8 +965,48 @@ export default function Renovaciones(props) {
                 textDecoration: isBaja ? "line-through" : "none",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 12, fontWeight: 900, color: stColor, whiteSpace: "nowrap", flexShrink: 0 }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
-              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 {Math.round(r.importePagado)}€/{r.precio}€</span>}
+              {editPrice === rkPrecio ? (
+                <input
+                  autoFocus
+                  type="number"
+                  value={priceTmp}
+                  onChange={function (e) { setPriceTmp(e.target.value); }}
+                  onBlur={function () {
+                    upd(r.nombre, selWeek.key, "precioCustom", priceTmp === "" ? null : +priceTmp);
+                    setEditPrice(null);
+                  }}
+                  onKeyDown={function (e) {
+                    if (e.key === "Enter") {
+                      upd(r.nombre, selWeek.key, "precioCustom", priceTmp === "" ? null : +priceTmp);
+                      setEditPrice(null);
+                    }
+                    if (e.key === "Escape") { setEditPrice(null); }
+                  }}
+                  style={{
+                    width: 70, padding: "2px 4px", fontSize: 12, fontWeight: 700,
+                    background: T.bg3, border: "1px solid " + T.navy, borderRadius: 4,
+                    color: T.text, outline: "none"
+                  }}
+                />
+              ) : (
+                <span
+                  onClick={function () { setEditPrice(rkPrecio); setPriceTmp(String(precioMostrar)); }}
+                  style={{
+                    fontSize: 12, fontWeight: 900, color: editadoPrecio ? "#3b82f6" : stColor,
+                    whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer",
+                    textDecoration: editadoPrecio ? "underline dotted" : "none"
+                  }}
+                  title="Click para editar precio"
+                >
+                  {isSegundoPago ? Math.round(precioMostrar / 2) + "€"
+                   : isMitad ? Math.round(r.importePagado || precioMostrar / 2) + "€ pag."
+                   : isReserva ? (r.importePagado||0) + "€ res."
+                   : (r.deudaReal && r.deudaReal < precioMostrar) ? Math.round(r.deudaReal) + "€"
+                   : precioMostrar + "€"}
+                  {editadoPrecio ? " ●" : ""}
+                </span>
+              )}
+              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 {Math.round(r.importePagado)}€/{precioMostrar}€</span>}
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>2º pago</span>}
               {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 Fraccionado</span>}
@@ -981,7 +1039,7 @@ export default function Renovaciones(props) {
                   var existing = renData[spRk];
                   if (!existing || !existing.notas) {
                     var newData = Object.assign({}, renData);
-                    newData[spRk] = { notas: "2º pago trimestral — faltan " + Math.round(r.precio / 2) + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
+                    newData[spRk] = { notas: "2º pago trimestral — faltan " + Math.round(precioMostrar / 2) + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
                     if (setRenData) setRenData(newData);
                     if (onSaveRenData) onSaveRenData(newData);
                   }
@@ -995,7 +1053,7 @@ export default function Renovaciones(props) {
                   var brRk = r.nombre.toLowerCase().trim() + "__" + brKey;
                   var existingR = renData[brRk];
                   if (!existingR || !existingR.notas) {
-                    var restante = Math.round(r.precio - (r.importePagado || r.precio * 0.25));
+                    var restante = Math.round(precioMostrar - (r.importePagado || precioMostrar * 0.25));
                     var nd = Object.assign({}, renData);
                     nd[brRk] = { notas: "Pago restante reserva — faltan " + restante + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
                     if (setRenData) setRenData(nd);
