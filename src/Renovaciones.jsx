@@ -606,10 +606,17 @@ export default function Renovaciones(props) {
     weekList.forEach(function (w) {
       if (!w || !w.key) return;
       weeksOut[w.key] = (w.clients || []).map(function (c) {
+        // Precio efectivo: si hay precioCustom en renData (precio editado a mano), usarlo
+        var rdKey = (c.nombre || "").toLowerCase().trim() + "__" + w.key;
+        var rdEntry = renData[rdKey] || {};
+        var precioEfectivo = (rdEntry.precioCustom !== undefined && rdEntry.precioCustom !== null && rdEntry.precioCustom !== "")
+          ? +rdEntry.precioCustom
+          : (+c.precio || 0);
+
         return {
           nombre: c.nombre,
           tipo: c.tipo || "",
-          precio: +c.precio || 0,
+          precio: precioEfectivo,
           fechaValor: c.fechaValor instanceof Date ? c.fechaValor.toISOString() : (c.fechaValor || null),
           renewMonday: c.renewMonday instanceof Date ? c.renewMonday.toISOString() : (c.renewMonday || null),
           pagado: !!c.pagado,
