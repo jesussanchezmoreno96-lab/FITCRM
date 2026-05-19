@@ -3,10 +3,10 @@ import { useState, useEffect } from "react";
 var SUPA_URL = "https://yvzearwbwwthquekqnnk.supabase.co";
 var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2emVhcndid3d0aHF1ZWtxbm5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTMwNTMsImV4cCI6MjA5MDg4OTA1M30.1BhalulMlEJ3am_D0e8Y3rRyM_qz0VR4_34VNV76FNE";
 
-var ENTRENADORES = ["Miguel", "Jesús", "Diego", "Marcelo", "Maria Isabel", "Mari Carmen", "Laura"];
+var ENTRENADORES = ["Miguel", "Jesús", "Diego", "Marcelo", "Maribel", "Mari Carmen", "Laura"];
 var TRAINER_COLORS = {
   "Miguel": "#3b82f6", "Jesús": "#22c55e", "Diego": "#06b6d4",
-  "Marcelo": "#f59e0b", "Maria Isabel": "#a78bfa", "Mari Carmen": "#ec4899", "Laura": "#f97316"
+  "Marcelo": "#f59e0b", "Maribel": "#a78bfa", "Mari Carmen": "#ec4899", "Laura": "#f97316"
 };
 
 function gid() { return Math.random().toString(36).substr(2, 9); }
