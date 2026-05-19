@@ -65,6 +65,8 @@ export default function Bonus(props){
       if(!d||!d.collection)return;
       d.collection.forEach(function(a){
         if(a.capacity!==1)return;
+        var EXCLUIR_UUIDS=["8b21913c-2d52-40bf-9b25-9ce85c74afcb","7b6d30a5-5c85-462b-ab2c-acd8d7ba54d2"];
+        if(EXCLUIR_UUIDS.indexOf(a.activity_uuid)>=0)return;
         var profName=a.professional_name||"";
         var entrenador=ENTRENADORES.find(function(e){return normName(profName).includes(normName(e));});
         if(!entrenador)return;
