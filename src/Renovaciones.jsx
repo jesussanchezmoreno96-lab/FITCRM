@@ -126,6 +126,8 @@ export default function Renovaciones(props) {
   var moveTarget_ = _(""), moveTarget = moveTarget_[0], setMoveTarget = moveTarget_[1];
   var bl_ = _(false), showBl = bl_[0], setShowBl = bl_[1];
   var blNew_ = _(""), blNew = blNew_[0], setBlNew = blNew_[1];
+  var editPrice_ = _(null), editPrice = editPrice_[0], setEditPrice = editPrice_[1];
+  var priceTmp_ = _(""), priceTmp = priceTmp_[0], setPriceTmp = priceTmp_[1];
 
   if (!bonos.length) {
     return (<div>
@@ -158,7 +160,8 @@ export default function Renovaciones(props) {
       precio: b.precio || b.total || 0, pagado: !!b.pagado,
       fechaPago: b.fechaPago || "", suscriptionUuid: b.suscriptionUuid || "",
       fraccionado: !!b.fraccionado, mitadPagada: !!b.mitadPagada,
-      esReserva: !!b.esReserva, importePagado: b.importePagado || 0
+      esReserva: !!b.esReserva, importePagado: b.importePagado || 0,
+      formaPago: b.formaPago || ""
     });
   });
 
@@ -198,6 +201,7 @@ export default function Renovaciones(props) {
       entries.push({
         nombre: client.nombre, tipo: bono.tipo, precio: bono.precio,
         pagado: bono.pagado, fechaPago: bono.fechaPago,
+        formaPago: bono.formaPago || "",
         renewMonday: monday, fechaValor: bono.fechaValor, fechaFin: bono.fechaFin,
         source: "bono", nextBooking: nextBooking,
         clientId: crmClient ? crmClient.id : null, clientStatus: crmClient ? crmClient.status : null,
@@ -562,8 +566,7 @@ export default function Renovaciones(props) {
       var wData = weekMap[wk];
       if (!wData || !wData.clients) return;
       wData.clients.forEach(function (c) {
-        var esEfPend = (c.precio === 0) && c.source !== "segundo_pago" && c.source !== "movido" && c.source !== "pago_restante" && c.source !== "calculado";
-        if (c.pagado && !esEfPend) return;
+        if (c.pagado) return;
         // Check renData for THIS specific entry's week
         var d = rd(c.nombre, wk);
         if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva") return;
@@ -603,10 +606,17 @@ export default function Renovaciones(props) {
     weekList.forEach(function (w) {
       if (!w || !w.key) return;
       weeksOut[w.key] = (w.clients || []).map(function (c) {
+        // Precio efectivo: si hay precioCustom en renData (precio editado a mano), usarlo
+        var rdKey = (c.nombre || "").toLowerCase().trim() + "__" + w.key;
+        var rdEntry = renData[rdKey] || {};
+        var precioEfectivo = (rdEntry.precioCustom !== undefined && rdEntry.precioCustom !== null && rdEntry.precioCustom !== "")
+          ? +rdEntry.precioCustom
+          : (+c.precio || 0);
+
         return {
           nombre: c.nombre,
           tipo: c.tipo || "",
-          precio: +c.precio || 0,
+          precio: precioEfectivo,
           fechaValor: c.fechaValor instanceof Date ? c.fechaValor.toISOString() : (c.fechaValor || null),
           renewMonday: c.renewMonday instanceof Date ? c.renewMonday.toISOString() : (c.renewMonday || null),
           pagado: !!c.pagado,
@@ -618,7 +628,8 @@ export default function Renovaciones(props) {
           nextBooking: c.nextBooking instanceof Date ? c.nextBooking.toISOString() : (c.nextBooking || null),
           clientId: c.clientId || null,
           clientStatus: c.clientStatus || null,
-          restante: +c.restante || 0
+          restante: +c.restante || 0,
+          formaPago: c.formaPago || ""
         };
       });
     });
@@ -662,6 +673,17 @@ export default function Renovaciones(props) {
     if (setRenData) setRenData(n);
     if (onSaveRenData) onSaveRenData(n);
   }
+  function getPrecio(nombre, weekKey, precioOriginal) {
+    var d = rd(nombre, weekKey);
+    if (d.precioCustom !== undefined && d.precioCustom !== null && d.precioCustom !== "") {
+      return +d.precioCustom;
+    }
+    return precioOriginal;
+  }
+  function isPrecioEditado(nombre, weekKey) {
+    var d = rd(nombre, weekKey);
+    return d.precioCustom !== undefined && d.precioCustom !== null && d.precioCustom !== "";
+  }
 
   // Notifications
   var thisWeekData = weekList.find(function (w) { return w.monday.getTime() === thisMonday.getTime(); });
@@ -669,9 +691,7 @@ export default function Renovaciones(props) {
   if (thisWeekData) {
     thisWeekData.clients.forEach(function (r) {
       var d = rd(r.nombre, thisWeekData.key);
-      var esEfPendN = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
-      var pagadoReal = r.pagado && !esEfPendN;
-      if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva" || pagadoReal || r.mitadPagada || r.esReserva) return;
+      if (d.renovacion === "renovado" || d.renovacion === "baja" || d.renovacion === "mitad" || d.renovacion === "reserva" || r.pagado || r.mitadPagada || r.esReserva) return;
       if (r.nextBooking) {
         try {
           var bd = new Date(r.nextBooking);
@@ -689,13 +709,12 @@ export default function Renovaciones(props) {
     var isPastWeek = w.monday < thisMonday;
     w.clients.forEach(function (c) {
       var d = rd(c.nombre, w.key);
-      var esEfectivoPendiente = (c.precio === 0) && c.source !== "segundo_pago" && c.source !== "movido" && c.source !== "pago_restante" && c.source !== "calculado";
       var marcadoRenovadoManual = (d.renovacion === "renovado");
       // Estados gestionados que NO son pago pendiente:
       var esMitad = d.renovacion === "mitad" || (c.mitadPagada && !c.pagado && d.renovacion !== "baja");
       var esReserva = d.renovacion === "reserva" || (c.esReserva && !c.pagado && d.renovacion !== "baja");
 
-      if (marcadoRenovadoManual || (c.pagado && !esEfectivoPendiente)) r++;
+      if (marcadoRenovadoManual || c.pagado) r++;
       else if (d.renovacion === "baja") b++;
       else if (esMitad || esReserva) {
         // Pagos fraccionados o reservas: gestionados, NO son pendientes
@@ -896,10 +915,10 @@ export default function Renovaciones(props) {
         var bMitad = db.renovacion === "mitad" || (b.mitadPagada && !b.pagado && db.renovacion !== "baja");
         var aReserva = da.renovacion === "reserva" || (a.esReserva && !a.pagado && da.renovacion !== "baja");
         var bReserva = db.renovacion === "reserva" || (b.esReserva && !b.pagado && db.renovacion !== "baja");
-        var aEsEf = (a.precio === 0) && a.source !== "segundo_pago" && a.source !== "movido" && a.source !== "pago_restante" && a.source !== "calculado";
-        var bEsEf = (b.precio === 0) && b.source !== "segundo_pago" && b.source !== "movido" && b.source !== "pago_restante" && b.source !== "calculado";
-        var aRenov = da.renovacion === "renovado" || (a.pagado && !aEsEf);
-        var bRenov = db.renovacion === "renovado" || (b.pagado && !bEsEf);
+        var aEsEf = (a.formaPago === "cash") || ((a.precio === 0) && a.source !== "segundo_pago" && a.source !== "movido" && a.source !== "pago_restante" && a.source !== "calculado");
+        var bEsEf = (b.formaPago === "cash") || ((b.precio === 0) && b.source !== "segundo_pago" && b.source !== "movido" && b.source !== "pago_restante" && b.source !== "calculado");
+        var aRenov = da.renovacion === "renovado" || (a.pagado && !aEsEf) || (a.pagado && aEsEf && !da.renovacion);
+        var bRenov = db.renovacion === "renovado" || (b.pagado && !bEsEf) || (b.pagado && bEsEf && !db.renovacion);
         var sa = aRenov ? 0 : aReserva ? 0.5 : aMitad ? 1 : da.renovacion === "baja" ? 3 : 2;
         var sb = bRenov ? 0 : bReserva ? 0.5 : bMitad ? 1 : db.renovacion === "baja" ? 3 : 2;
         return sa - sb;
@@ -908,8 +927,10 @@ export default function Renovaciones(props) {
         // Auto-detect mitad pagada or reserva from TIMP API
         var autoMitad = r.mitadPagada && !r.pagado;
         var autoReserva = r.esReserva && !r.pagado;
-        var esEfectivoPendienteR = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
-        var isRenovado = data.renovacion === "renovado" || (r.pagado && !esEfectivoPendienteR);
+        var esEfectivoR = (r.formaPago === "cash") || ((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado");
+        var isRenovado = data.renovacion === "renovado"
+          || (r.pagado && !esEfectivoR)
+          || (r.pagado && esEfectivoR && !data.renovacion);
         var isReserva = data.renovacion === "reserva" || (autoReserva && !isRenovado && data.renovacion !== "baja");
         var isMitad = data.renovacion === "mitad" || (autoMitad && !isRenovado && !isReserva && data.renovacion !== "baja");
         var isBaja = data.renovacion === "baja";
@@ -932,6 +953,11 @@ export default function Renovaciones(props) {
         // Is this a "segundo pago" entry?
         var isSegundoPago = r.source === "segundo_pago";
 
+        // Precio efectivo (puede haber sido editado a mano)
+        var rkPrecio = rk(r.nombre, selWeek.key);
+        var precioMostrar = getPrecio(r.nombre, selWeek.key, r.precio);
+        var editadoPrecio = isPrecioEditado(r.nombre, selWeek.key);
+
         return <div key={i} style={{
           padding: "4px 12px", borderBottom: "1.5px solid " + (dk ? "rgba(255,255,255,.20)" : "rgba(0,0,0,.18)"),
           background: rowBg, opacity: isBaja ? 0.6 : 1
@@ -946,8 +972,48 @@ export default function Renovaciones(props) {
                 textDecoration: isBaja ? "line-through" : "none",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 1, minWidth: 0
               }}>{r.nombre}</div>
-              <span style={{ fontSize: 12, fontWeight: 900, color: stColor, whiteSpace: "nowrap", flexShrink: 0 }}>{isSegundoPago ? Math.round(r.precio / 2) + "€" : isMitad ? Math.round(r.importePagado || r.precio / 2) + "€ pag." : isReserva ? (r.importePagado||0) + "€ res." : (r.deudaReal && r.deudaReal < r.precio) ? Math.round(r.deudaReal) + "€" : r.precio + "€"}</span>
-              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 {Math.round(r.importePagado)}€/{r.precio}€</span>}
+              {editPrice === rkPrecio ? (
+                <input
+                  autoFocus
+                  type="number"
+                  value={priceTmp}
+                  onChange={function (e) { setPriceTmp(e.target.value); }}
+                  onBlur={function () {
+                    upd(r.nombre, selWeek.key, "precioCustom", priceTmp === "" ? null : +priceTmp);
+                    setEditPrice(null);
+                  }}
+                  onKeyDown={function (e) {
+                    if (e.key === "Enter") {
+                      upd(r.nombre, selWeek.key, "precioCustom", priceTmp === "" ? null : +priceTmp);
+                      setEditPrice(null);
+                    }
+                    if (e.key === "Escape") { setEditPrice(null); }
+                  }}
+                  style={{
+                    width: 70, padding: "2px 4px", fontSize: 12, fontWeight: 700,
+                    background: T.bg3, border: "1px solid " + T.navy, borderRadius: 4,
+                    color: T.text, outline: "none"
+                  }}
+                />
+              ) : (
+                <span
+                  onClick={function () { setEditPrice(rkPrecio); setPriceTmp(String(precioMostrar)); }}
+                  style={{
+                    fontSize: 12, fontWeight: 900, color: editadoPrecio ? "#3b82f6" : stColor,
+                    whiteSpace: "nowrap", flexShrink: 0, cursor: "pointer",
+                    textDecoration: editadoPrecio ? "underline dotted" : "none"
+                  }}
+                  title="Click para editar precio"
+                >
+                  {isSegundoPago ? Math.round(precioMostrar / 2) + "€"
+                   : isMitad ? Math.round(r.importePagado || precioMostrar / 2) + "€ pag."
+                   : isReserva ? (r.importePagado||0) + "€ res."
+                   : (r.deudaReal && r.deudaReal < precioMostrar) ? Math.round(r.deudaReal) + "€"
+                   : precioMostrar + "€"}
+                  {editadoPrecio ? " ●" : ""}
+                </span>
+              )}
+              {r.fraccionado && r.importePagado > 0 && !isRenovado && !isMitad && !isReserva && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 {Math.round(r.importePagado)}€/{precioMostrar}€</span>}
               {r.source === "calculado" && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#f59e0b15", color: "#f59e0b", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>sin bono nuevo</span>}
               {isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>2º pago</span>}
               {isMitad && !isSegundoPago && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: "#6366f115", color: "#6366f1", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>💰 Fraccionado</span>}
@@ -961,7 +1027,12 @@ export default function Renovaciones(props) {
 
             {/* STATUS — big select */}
             <select
-              value={(r.pagado && !esEfectivoPendienteR) ? "renovado" : isReserva ? "reserva" : isMitad ? "mitad" : (data.renovacion || "pendiente")}
+              value={(r.pagado && !esEfectivoR) ? "renovado"
+                : (esEfectivoR && data.renovacion) ? data.renovacion
+                : isReserva ? "reserva"
+                : isMitad ? "mitad"
+                : r.pagado ? "renovado"
+                : (data.renovacion || "pendiente")}
               onChange={function (e) {
                 var val = e.target.value;
                 upd(r.nombre, selWeek.key, "renovacion", val);
@@ -975,7 +1046,7 @@ export default function Renovaciones(props) {
                   var existing = renData[spRk];
                   if (!existing || !existing.notas) {
                     var newData = Object.assign({}, renData);
-                    newData[spRk] = { notas: "2º pago trimestral — faltan " + Math.round(r.precio / 2) + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
+                    newData[spRk] = { notas: "2º pago trimestral — faltan " + Math.round(precioMostrar / 2) + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
                     if (setRenData) setRenData(newData);
                     if (onSaveRenData) onSaveRenData(newData);
                   }
@@ -989,7 +1060,7 @@ export default function Renovaciones(props) {
                   var brRk = r.nombre.toLowerCase().trim() + "__" + brKey;
                   var existingR = renData[brRk];
                   if (!existingR || !existingR.notas) {
-                    var restante = Math.round(r.precio - (r.importePagado || r.precio * 0.25));
+                    var restante = Math.round(precioMostrar - (r.importePagado || precioMostrar * 0.25));
                     var nd = Object.assign({}, renData);
                     nd[brRk] = { notas: "Pago restante reserva — faltan " + restante + "€", segundoPago: true, fromWeek: selWeek.key, clientName: r.nombre };
                     if (setRenData) setRenData(nd);
@@ -1003,10 +1074,10 @@ export default function Renovaciones(props) {
                   }
                 }
               }}
-              disabled={r.pagado && !((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado")}
+              disabled={r.pagado && !esEfectivoR}
               style={{
                 padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 800,
-                outline: "none", cursor: (r.pagado && !((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado")) ? "default" : "pointer",
+                outline: "none", cursor: (r.pagado && !esEfectivoR) ? "default" : "pointer",
                 border: "1.5px solid " + stBorder,
                 background: stBg, color: stColor,
                 minWidth: 130, flexShrink: 0
@@ -1044,11 +1115,10 @@ export default function Renovaciones(props) {
               }}>📅</button>
           </div>
 
-          {/* EFECTIVO PENDIENTE — bono a precio 0 (TIMP marca pagado pero falta cobrar en mano) */}
+          {/* EFECTIVO — etiqueta informativa: formaPago === "cash" o precio 0 (operativa antigua) */}
           {(() => {
-            var data2 = rd(r.nombre, selWeek.key);
-            var esEfectivoPendiente = (r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado";
-            if (!esEfectivoPendiente || data2.renovacion === "renovado") return null;
+            var esEfectivo = (r.formaPago === "cash") || ((r.precio === 0) && r.source !== "segundo_pago" && r.source !== "movido" && r.source !== "pago_restante" && r.source !== "calculado");
+            if (!esEfectivo) return null;
             return <div style={{
               fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
               background: dk ? "rgba(16,185,129,0.12)" : "#d1fae5",

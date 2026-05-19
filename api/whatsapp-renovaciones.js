@@ -163,7 +163,8 @@ function turnoDe(hora) {
 //         source: "bono",        // "bono" | "segundo_pago" | "pago_restante" | "movido" | "arrastre_impago"
 //         nextBooking: "...",
 //         clientId: "...",
-//         clientStatus: "activo"
+//         clientStatus: "activo",
+//         formaPago: "cash"      // "" | "cash" | "credit_card" | "inapp" | ...
 //       },
 //       ...
 //     ],
@@ -226,16 +227,18 @@ function decideListas({ persisted, renData, attendingMap, manana, semanaActualKe
       const hora = attendingMap.get(nn);
       if (hora === undefined) continue; // no viene mañana
 
-      // Efectivo pendiente: bono original a 0€ que TIMP marca pagado=true.
-      // Excluimos las "fuentes" cuyo precio 0 significa "restante ya cobrado".
-      const esEfectivoPendiente =
-        (c.precio === 0 || c.precio == 0) &&
-        c.source !== "segundo_pago" &&
-        c.source !== "movido" &&
-        c.source !== "pago_restante" &&
-        c.source !== "calculado";
+      // Efectivo: TIMP marca formaPago="cash", o bono a 0€ con operativa antigua
+      // (precio bajado a 0 después de cobrar). Excluimos las "fuentes" cuyo
+      // precio 0 significa "restante ya cobrado".
+      const esEfectivo =
+        (c.formaPago === "cash") ||
+        ((c.precio === 0 || c.precio == 0) &&
+          c.source !== "segundo_pago" &&
+          c.source !== "movido" &&
+          c.source !== "pago_restante" &&
+          c.source !== "calculado");
 
-      if (c.pagado && !esEfectivoPendiente) continue;
+      if (c.pagado) continue;
 
       const st = estadoEn(c.nombre, wk);
       if (st.renovacion === "renovado" || st.renovacion === "baja") continue;
@@ -253,7 +256,7 @@ function decideListas({ persisted, renData, attendingMap, manana, semanaActualKe
             tipo: c.tipo || "",
             precio: +c.precio || 0,
             motivo: "Pendiente",
-            efectivo: esEfectivoPendiente
+            efectivo: esEfectivo
           };
         } else if (isReserva) {
           const fv = c.fechaValor ? new Date(c.fechaValor) : null;
@@ -291,7 +294,7 @@ function decideListas({ persisted, renData, attendingMap, manana, semanaActualKe
           tipo: c.tipo || "",
           precio: +c.precio || 0,
           motivo: "Pendiente",
-          efectivo: esEfectivoPendiente
+          efectivo: esEfectivo
         };
       }
 
