@@ -75,8 +75,8 @@ export default function Bonus(props){
           var fecha=a.starting_at?a.starting_at.substring(0,10):"";
           var clienteNombre=b.full_name;
           setPruebas(function(prev){
-            var yaExiste=prev.some(function(p){return matchesName(p.cliente,clienteNombre)&&p.fecha===fecha;});
-            if(yaExiste)return prev;
+            var existente=prev.find(function(p){return matchesName(p.cliente,clienteNombre)&&p.fecha===fecha;});
+            if(existente){if(existente.entrenador===entrenador)return prev;var upd=Object.assign({},existente,{entrenador:entrenador});savePrueba(upd);return prev.map(function(p){return p.id===existente.id?upd:p;});} 
             var np={id:gid(),cliente:clienteNombre,entrenador:entrenador,fecha:fecha,notas:"",convirtio:null,origen:"timp",fechaRegistro:new Date().toISOString()};
             savePrueba(np);
             return prev.concat([np]);
