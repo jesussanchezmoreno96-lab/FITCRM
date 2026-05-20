@@ -92,7 +92,7 @@ export default function Bonus(props){
     setLoadingTimp(true);
     var allAutos=[];
     function fetchPage(page){
-      return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/autopurchases%3Fdate_from=2023-01-01%26date_to=2027-12-31%26page="+page)
+      return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/purchases%3Fdate_from=2023-01-01%26date_to=2027-12-31%26page="+page)
       .then(function(r){return r.json();}).then(function(d){
         if(!d||!d.collection)return;
         var ent=d.collection.filter(function(a){if(!a.caption||!a.paid_at||a.removed)return false;var c=a.caption.toLowerCase();return c.includes("time partner")||c.includes("time pro")||c.includes("bono")||c.includes("entrenamiento");});
