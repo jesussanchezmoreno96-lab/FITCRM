@@ -28,8 +28,9 @@ function calcEstado(bonosCliente,fechaPrueba){
   var trimestrales=sorted.filter(function(b){return(b.caption||"").toLowerCase().includes("trimestral");});
   var mensuales=sorted.filter(function(b){return!(b.caption||"").toLowerCase().includes("trimestral");});
   var fidelizado=false,razon="";
-  if(trimestrales.length>=2){fidelizado=true;razon=trimestrales.length+" bonos trimestrales";}
-  else if(trimestrales.length===1){var ft=parseFechaInicio(trimestrales[0].available_at);var dep=sorted.filter(function(b){var fb=parseFechaInicio(b.available_at);return fb&&ft&&fb>ft;});if(dep.length>=1){fidelizado=true;razon="Trimestral + "+dep.length+" renovación"+(dep.length>1?"es":"");}else{razon="1 trimestral (pendiente renovar)";}}
+  if(trimestrales.length>=1&&sorted.length>=2){fidelizado=true;razon=trimestrales.length>1?trimestrales.length+" bonos trimestrales":"Trimestral + "+mensuales.length+" mensual"+(mensuales.length!==1?"es":"");}
+  else if(trimestrales.length===1&&sorted.length===1){razon="1 trimestral (pendiente renovar)";}
+  else if(mensuales.length>=4){fidelizado=true;razon=mensuales.length+" bonos mensuales";}
   else if(mensuales.length>=4){fidelizado=true;razon=mensuales.length+" bonos mensuales";}
   else{razon=mensuales.length+" bono"+(mensuales.length!==1?"s":"")+" mensual"+(mensuales.length!==1?"es":"");}
   var estado=fidelizado?(sigueActivo?"mas90":"inactivo"):"menos90";
