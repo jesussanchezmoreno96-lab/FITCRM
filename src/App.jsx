@@ -446,7 +446,8 @@ export default function App(){
     }).catch(function(err){console.error("[syncTimp] Error:",err);setTimpSyncing(false);setSyncInProgress(false);});
   }
 
-  // Auto-fetch bonos from TIMP API (autopurchases + subscriptions together)
+  // Auto-fetch bonos from TIMP API (purchases como fuente principal + subscriptions + autopurchases para retrocompat).
+  // Migrado de autopurchases a purchases para captar también los bonos creados manualmente / puente sin autocompra.
   function syncBonos(){
     // Paginación en las 3 llamadas — antes solo se leía page=1 (25 registros)
     var autoQs="%3Fdate_from=2025-01-01%26date_to=2027-01-01";
@@ -459,8 +460,12 @@ export default function App(){
       var autos=results[0]||[];
       var subs=results[1]||[];
       var purchases=results[2]||[];
-      if(autos.length===0){console.warn("[syncBonos] Sin autopurchases de TIMP");return;}
+      if(purchases.length===0){console.warn("[syncBonos] Sin purchases de TIMP");return;}
       console.log("[syncBonos] Cargados "+autos.length+" autopurchases, "+subs.length+" subs, "+purchases.length+" purchases");
+      // Fuente de bonos: /purchases (superconjunto de /autopurchases que incluye bonos manuales/puente sin autocompra).
+      // Filtramos removed=true: bonos anulados y líneas de devolución (caption "Devolución...") no son bonos vivos.
+      var bonosFuente = purchases.filter(function(p){ return !p.removed; });
+      console.log("[syncBonos] Fuente bonos = purchases sin removed: "+bonosFuente.length+" registros");
       var parsed=[];
       // SOLO estos bonos cuentan para renovaciones de entrenamiento (lista blanca)
       var ENTRENAMIENTO_BONOS=[
@@ -475,7 +480,7 @@ export default function App(){
         var c=caption.toLowerCase().trim();
         return ENTRENAMIENTO_BONOS.some(function(tb){return c===tb||c.indexOf(tb)>=0;});
       }
-      autos.forEach(function(a){
+      bonosFuente.forEach(function(a){
         if(a.removed)return;
         var sub=subs.find(function(s){return s.uuid===a.suscription_uuid;});
         if(!sub||!sub.full_name)return;
