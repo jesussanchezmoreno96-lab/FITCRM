@@ -49,6 +49,7 @@ export default function Bonus(props){
   var [timpLoaded,setTimpLoaded]=useState(false);
   var [allAutopurchases,setAllAutopurchases]=useState([]);
   var [allSubs,setAllSubs]=useState([]);
+  var bonosApp=props.bonos||[];
 
   useEffect(function(){
     fetch(SUPA_URL+"/rest/v1/bonus_pruebas?select=*",{headers:{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY}})
@@ -88,6 +89,18 @@ export default function Bonus(props){
   }
 
   function loadTimpData(){
+    setLoadingTimp(true);
+    fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/subscriptions%3Fpage=1")
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var subs=d&&d.collection?d.collection:[];
+      setAllSubs(subs);
+      setAllAutopurchases(bonosApp);
+      setLoadingTimp(false);
+      setTimpLoaded(true);
+    }).catch(function(){setLoadingTimp(false);});
+  }
+  function loadTimpData_OLD(){
     setLoadingTimp(true);
     var allAutos=[];
     function fetchPage(page){
