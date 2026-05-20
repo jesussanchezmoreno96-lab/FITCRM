@@ -90,18 +90,6 @@ export default function Bonus(props){
 
   function loadTimpData(){
     setLoadingTimp(true);
-    fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/subscriptions%3Fpage=1")
-    .then(function(r){return r.json();})
-    .then(function(d){
-      var subs=d&&d.collection?d.collection:[];
-      setAllSubs(subs);
-      setAllAutopurchases(bonosApp);
-      setLoadingTimp(false);
-      setTimpLoaded(true);
-    }).catch(function(){setLoadingTimp(false);});
-  }
-  function loadTimpData_OLD(){
-    setLoadingTimp(true);
     var allAutos=[];
     function fetchPage(page){
       return fetch("/api/timp?path=branch_buildings/"+TIMP_CENTER+"/autopurchases%3Fdate_from=2023-01-01%26date_to=2027-12-31%26page="+page)
